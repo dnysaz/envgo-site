@@ -63,9 +63,12 @@ holds the key. No Node.js, no `node_modules`, no runtime to install — roughly
 <Tabs>
   <TabItem label="Windows">
 
+[⬇ envgo-windows-amd64.exe](https://github.com/dnysaz/envgo/releases/latest/download/envgo-windows-amd64.exe)
+· [ARM64 build](https://github.com/dnysaz/envgo/releases/latest/download/envgo-windows-arm64.exe)
+
 ```powershell
 mkdir C:\envgo
-copy dist\envgo-windows-amd64.exe C:\envgo\envgo.exe
+copy $env:USERPROFILE\Downloads\envgo-windows-amd64.exe C:\envgo\envgo.exe
 [Environment]::SetEnvironmentVariable(
   "Path",
   [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\envgo",
@@ -75,13 +78,13 @@ copy dist\envgo-windows-amd64.exe C:\envgo\envgo.exe
 envgo -v
 ```
 
-Use `envgo-windows-arm64.exe` on ARM64 Windows.
-
   </TabItem>
   <TabItem label="macOS">
 
-Extract the release ZIP and double-click `Install_envGo.command`, or install
-manually:
+[⬇ Apple Silicon](https://github.com/dnysaz/envgo/releases/latest/download/envGo-macOS-AppleSilicon.zip)
+· [⬇ Intel](https://github.com/dnysaz/envgo/releases/latest/download/envGo-macOS-Intel.zip)
+
+Extract the ZIP and double-click `Install_envGo.command`, or install manually:
 
 ```bash
 mkdir -p ~/.local/bin
@@ -93,15 +96,20 @@ envgo -v
   </TabItem>
   <TabItem label="Linux">
 
+[⬇ amd64](https://github.com/dnysaz/envgo/releases/latest/download/envgo-linux-amd64)
+· [⬇ arm64](https://github.com/dnysaz/envgo/releases/latest/download/envgo-linux-arm64)
+
 ```bash
 uname -m      # x86_64 → amd64, aarch64 → arm64
-sudo cp dist/envgo-linux-amd64 /usr/local/bin/envgo
-sudo chmod +x /usr/local/bin/envgo
+chmod +x ~/Downloads/envgo-linux-amd64
+sudo mv ~/Downloads/envgo-linux-amd64 /usr/local/bin/envgo
 envgo -v
 ```
 
   </TabItem>
 </Tabs>
+
+Need a different build, or a checksum to verify one? [Download](/download).
 
 ### 2. Create a project and run it
 
@@ -188,6 +196,16 @@ instead. They only apply to `envgo run` and `envgo run dev`; a flag like
     [Threat Model](/reference/threat-model)
   </Card>
 </CardGrid>
+
+## Free, and open source
+
+envGo is **MIT licensed**. Free for personal and commercial use, with no paid
+tier, no licence key, no usage limit, and no telemetry — the binary makes no
+outbound connections of its own, only the upstream calls you ask it to proxy.
+
+Feedback is genuinely welcome, and a confusing error message is as useful to hear
+about as a bug. See [License & feedback](/license) for where to report an issue,
+ask a question, or propose a change.
 
 ## Known limitations
 

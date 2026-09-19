@@ -45,6 +45,10 @@ export default defineConfig({
           slug: 'download',
         },
         {
+          label: 'License & feedback',
+          slug: 'license',
+        },
+        {
           label: 'Getting Started',
           items: [
             { label: 'Introduction', slug: 'getting-started/introduction' },

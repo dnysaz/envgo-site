@@ -20,14 +20,16 @@ put `envgo` on your `PATH` yet, see [Installation](/getting-started/installation
 <Tabs>
   <TabItem label="Windows">
 
-Download or copy the binary and put it on your `PATH`:
+[⬇ envgo-windows-amd64.exe](https://github.com/dnysaz/envgo/releases/latest/download/envgo-windows-amd64.exe)
+· [⬇ envgo-windows-arm64.exe](https://github.com/dnysaz/envgo/releases/latest/download/envgo-windows-arm64.exe)
+(ARM64 Windows)
+
+Put the downloaded binary on your `PATH`:
 
 ```powershell
 mkdir C:\envgo
-copy dist\envgo-windows-amd64.exe C:\envgo\envgo.exe
+copy $env:USERPROFILE\Downloads\envgo-windows-amd64.exe C:\envgo\envgo.exe
 ```
-
-For an ARM64 Windows machine use `envgo-windows-arm64.exe`.
 
 Add `C:\envgo` to your user `PATH`:
 
@@ -55,9 +57,14 @@ of running the command above.
   </TabItem>
   <TabItem label="macOS">
 
+[⬇ envGo-macOS-AppleSilicon.zip](https://github.com/dnysaz/envgo/releases/latest/download/envGo-macOS-AppleSilicon.zip)
+(M-series) · [⬇ envGo-macOS-Intel.zip](https://github.com/dnysaz/envgo/releases/latest/download/envGo-macOS-Intel.zip)
+(Intel)
+
 The release ZIP is the easiest route:
 
-1. Extract `envGo-macOS-AppleSilicon.zip` (M-series) or `envGo-macOS-Intel.zip`
+1. Extract the ZIP you downloaded — `envGo-macOS-AppleSilicon.zip` (M-series) or
+   `envGo-macOS-Intel.zip`
 2. Double-click `Install_envGo.command` inside it
 3. Open a new terminal and verify
 
@@ -90,29 +97,35 @@ xattr -dr com.apple.quarantine envGo-macOS-AppleSilicon
   </TabItem>
   <TabItem label="Linux">
 
+[⬇ envgo-linux-amd64](https://github.com/dnysaz/envgo/releases/latest/download/envgo-linux-amd64)
+· [⬇ envgo-linux-arm64](https://github.com/dnysaz/envgo/releases/latest/download/envgo-linux-arm64)
+
+The downloaded file is the binary itself — no archive to extract:
+
 ```bash
 uname -m      # x86_64 → amd64, aarch64 → arm64
+chmod +x ~/Downloads/envgo-linux-amd64
 
 # System-wide
-sudo cp dist/envgo-linux-amd64 /usr/local/bin/envgo
-sudo chmod +x /usr/local/bin/envgo
+sudo mv ~/Downloads/envgo-linux-amd64 /usr/local/bin/envgo
 
 # Or per-user, no sudo needed
 mkdir -p ~/.local/bin
-cp dist/envgo-linux-amd64 ~/.local/bin/envgo
-chmod +x ~/.local/bin/envgo
+mv ~/Downloads/envgo-linux-amd64 ~/.local/bin/envgo
 ```
 
 If you installed into `~/.local/bin`, make sure it is on `PATH`:
 
 ```bash
 echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.bashrc
-source ~/.bashrc
-envgo -v
+source ~/.bashrc  envgo -v
 ```
 
   </TabItem>
 </Tabs>
+
+Need a build for another platform, or a SHA-256 checksum to verify one? See
+[Download](/download).
 
 ## Step 2 — Create the project
 
@@ -464,8 +477,9 @@ PowerShell; on macOS and Linux they are a POSIX shell.
 
 ```powershell
 # 1. Install (adjust the binary name for ARM64)
+#    Download: https://github.com/dnysaz/envgo/releases/latest/download/envgo-windows-amd64.exe
 mkdir C:\envgo
-copy dist\envgo-windows-amd64.exe C:\envgo\envgo.exe
+copy $env:USERPROFILE\Downloads\envgo-windows-amd64.exe C:\envgo\envgo.exe
 [Environment]::SetEnvironmentVariable(
   "Path",
   [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\envgo",
@@ -492,7 +506,9 @@ envgo run dev -a api.openai.com
   <TabItem label="macOS">
 
 ```bash
-# 1. Install
+# 1. Install — from the extracted envGo-macOS-AppleSilicon.zip
+#    (M-series; use envGo-macOS-Intel.zip and envgo-darwin-amd64 for Intel)
+#    Download: https://github.com/dnysaz/envgo/releases/latest/download/envGo-macOS-AppleSilicon.zip
 mkdir -p ~/.local/bin
 cp dist/envgo-darwin-arm64 ~/.local/bin/envgo      # or envgo-darwin-amd64
 chmod +x ~/.local/bin/envgo
@@ -519,8 +535,9 @@ envgo run dev -a api.openai.com
 ```bash
 # 1. Install
 uname -m      # x86_64 → amd64, aarch64 → arm64
-sudo cp dist/envgo-linux-amd64 /usr/local/bin/envgo
-sudo chmod +x /usr/local/bin/envgo
+# Download: https://github.com/dnysaz/envgo/releases/latest/download/envgo-linux-amd64
+chmod +x ~/Downloads/envgo-linux-amd64
+sudo mv ~/Downloads/envgo-linux-amd64 /usr/local/bin/envgo
 
 # 2. Verify
 envgo -v

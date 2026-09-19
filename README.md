@@ -58,6 +58,7 @@ All pages are `.mdx` files under `src/content/docs/`:
 src/content/docs/
   index.mdx                 landing page
   download.mdx              build download links
+  license.mdx               MIT license, free use, feedback channels
   getting-started/          introduction, installation, quick start
   core-concepts/            how it works, security model, environment variables
   modes/                    local mode, public mode
@@ -88,3 +89,16 @@ configuration.
 Update the version on `download.mdx` after cutting a new release in the envGo
 repository. The download URLs themselves point at `/releases/latest/download/…`
 and do not need changing.
+
+## License
+
+MIT — see [LICENSE](LICENSE). The site and the runtime are both free to use,
+modify, and redistribute, including commercially.
+
+## Feedback
+
+This repository tracks documentation problems: [open an issue
+there](https://github.com/dnysaz/envgo-site/issues). Bugs in the runtime,
+questions, and code contributions belong in the [envGo
+repository](https://github.com/dnysaz/envgo) — see its `CONTRIBUTING.md` for code
+constraints and `SECURITY.md` for private reporting.

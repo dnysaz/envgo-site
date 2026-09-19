@@ -1,0 +1,104 @@
+---
+title: License & feedback
+description: envGo is MIT licensed and free to use, with no paid tier
+---
+
+envGo is **free and open source under the MIT license**. There is no paid tier,
+no licence key, no account to sign up for, no usage limit, and no telemetry —
+the binary does not phone home.
+
+## What you may do
+
+The MIT license is deliberately permissive. You may:
+
+- use envGo for personal, commercial, or internal projects
+- run it on any number of servers, with any number of users
+- modify it, fork it, and keep your changes private
+- bundle it inside your own product or redistribute it
+- sell a product or service that uses it
+
+## The one condition
+
+Include the copyright notice and the licence text wherever you redistribute the
+software. That is the whole requirement.
+
+```text
+MIT License
+
+Copyright (c) 2026 Ketut Dana
+```
+
+The full text ships in
+[LICENSE](https://github.com/dnysaz/envgo/blob/main/LICENSE) in the source
+repository.
+
+## No warranty
+
+As with any MIT-licensed project, envGo comes **"as is"**, without warranty of
+any kind. That is worth taking seriously here, because some behaviours are yours
+to configure:
+
+- **Rate limiting is unlimited unless you set it.** `default_rate_limit` is empty
+  by default; a config that omits it serves unthrottled.
+- **Streaming responses are not redacted.** See
+  [Configuration](/reference/configuration#response-scrubbing).
+- **A failed PHP execution serves the `.php` source file.** See
+  [PHP Support](/guides/php-support#the-fall-through-caveat).
+
+The [Threat Model](/reference/threat-model) lists everything envGo does *not*
+protect against. Reading it before going to production is the responsible
+trade-off for a tool this small.
+
+## No telemetry
+
+envGo makes no outbound connections of its own. The only network traffic it
+produces is:
+
+- the upstream calls you ask it to proxy, to the hosts you allowlist
+- nothing else
+
+There is no analytics, no update check, no crash reporting, and no identifier.
+You can verify this by reading the source, or by running it behind a network
+monitor — the request history on the dashboard is built from the process's own
+memory.
+
+## Feedback and contributions
+
+Feedback of every size is welcome. A confusing error message is as useful to hear
+about as a bug, and often more.
+
+| What you have | Where to put it |
+|---------------|-----------------|
+| A bug, crash, or wrong output | [Open an issue](https://github.com/dnysaz/envgo/issues/new/choose) |
+| An idea, a design question, or "how do I…" | [Start a discussion](https://github.com/dnysaz/envgo/discussions) |
+| A security concern | [SECURITY.md](https://github.com/dnysaz/envgo/blob/main/SECURITY.md) — privately, never a public issue |
+| A problem with these docs | [dnysaz/envgo-site](https://github.com/dnysaz/envgo-site/issues) |
+| A code change | [CONTRIBUTING.md](https://github.com/dnysaz/envgo/blob/main/CONTRIBUTING.md) |
+
+If you are proposing a code change, two constraints matter more than style:
+
+1. **No third-party dependencies.** The standard library is the entire toolkit.
+   This is what keeps the binary self-contained and dependency-free.
+2. **Secrets must never reach the client.** Any change to substitution, logging,
+   the dashboard, or response handling is judged against that rule.
+
+When reporting a bug, please include the version (`envgo -v`), your OS and
+architecture, the exact command, and the log output. Check the log for secrets
+before pasting — envGo redacts values it knows about, but it cannot redact what
+you copy yourself.
+
+## Does documentation count as contributing?
+
+Yes. These pages are a separate project from the runtime, and an unclear
+paragraph is worth fixing. If something here is wrong, missing, or assumes
+knowledge you did not have, that is a real report — open an issue on
+[envgo-site](https://github.com/dnysaz/envgo-site).
+
+## Source and releases
+
+| | |
+|---|---|
+| Runtime (Go) | [github.com/dnysaz/envgo](https://github.com/dnysaz/envgo) |
+| This documentation | [github.com/dnysaz/envgo-site](https://github.com/dnysaz/envgo-site) |
+| Binaries | [Releases](https://github.com/dnysaz/envgo/releases) · [Download page](/download) |
+| Live docs | [dnysaz.github.io/envgo-site](https://dnysaz.github.io/envgo-site/) |
