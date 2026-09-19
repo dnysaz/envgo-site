@@ -1,0 +1,206 @@
+---
+title: envGo
+description: Zero-dependency micro-runtime for HTML/Vanilla JS
+template: splash
+hero:
+  tagline: Keep API keys out of the browser. One Go binary serves your static site and injects .env secrets server-side.
+  actions:
+    - text: Get Started
+      link: /getting-started/introduction
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/dnysaz/envgo
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Why envGo
+
+`fetch()` calls written in front-end JavaScript ship your API key to every
+visitor. A conventional backend fixes that but brings a runtime, a dependency
+tree, and a deployment to maintain.
+
+envGo is the narrow alternative: a single static binary that serves your HTML and
+holds the key. No Node.js, no `node_modules`, no runtime to install — roughly
+2–8 MB depending on platform.
+
+## Core features
+
+<CardGrid>
+  <Card title="Single binary" icon="puzzle">
+    Static file server, proxy, and gateway in one executable. Zero third-party Go
+    dependencies — the standard library only.
+  </Card>
+  <Card title="Secrets never reach the browser" icon="shield">
+    `{NAME}` placeholders are substituted inside the Go process. DevTools, the
+    Network tab, and browser memory only ever see placeholders and boolean flags.
+  </Card>
+  <Card title="Fixed-route gateway" icon="seti:config">
+    Public mode serves `/api/&lt;name&gt;` from a JSON config, with per-route
+    variable allow-sets, rate limiting, and optional bearer auth.
+  </Card>
+  <Card title="Hot reload" icon="refresh">
+    Edit `.env` while running — changes are picked up within about 1.5 seconds, no
+    restart.
+  </Card>
+  <Card title="Cross-platform" icon="laptop">
+    macOS, Linux, and Windows on amd64 and arm64, all from one codebase.
+  </Card>
+  <Card title="Built-in diagnostics" icon="magnifier">
+    A metadata-only dashboard, typo detection for env keys, and warnings when PHP
+    code would expose a secret.
+  </Card>
+</CardGrid>
+
+## Quick start
+
+### 1. Install
+
+<Tabs>
+  <TabItem label="Windows">
+
+```powershell
+mkdir C:\envgo
+copy dist\envgo-windows-amd64.exe C:\envgo\envgo.exe
+[Environment]::SetEnvironmentVariable(
+  "Path",
+  [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\envgo",
+  "User"
+)
+# Open a NEW terminal, then:
+envgo -v
+```
+
+Use `envgo-windows-arm64.exe` on ARM64 Windows.
+
+  </TabItem>
+  <TabItem label="macOS">
+
+Extract the release ZIP and double-click `Install_envGo.command`, or install
+manually:
+
+```bash
+mkdir -p ~/.local/bin
+cp dist/envgo-darwin-arm64 ~/.local/bin/envgo   # or envgo-darwin-amd64
+chmod +x ~/.local/bin/envgo
+envgo -v
+```
+
+  </TabItem>
+  <TabItem label="Linux">
+
+```bash
+uname -m      # x86_64 → amd64, aarch64 → arm64
+sudo cp dist/envgo-linux-amd64 /usr/local/bin/envgo
+sudo chmod +x /usr/local/bin/envgo
+envgo -v
+```
+
+  </TabItem>
+</Tabs>
+
+### 2. Create a project and run it
+
+The next two commands are identical on every platform:
+
+```bash
+mkdir myapp && cd myapp
+envgo init      # writes .env, .env.example, index.html, .gitignore, README.md
+# put a real key in .env, then:
+envgo run dev   # opens http://127.0.0.1:8080/
+```
+
+Your page uses the key without ever seeing it:
+
+```html
+<div id="MY_SECRET"></div>
+<script src="/__env.js"></script>
+```
+
+```javascript
+// The browser sends the literal text {OPENAI_API_KEY};
+// the Go process substitutes the real value before forwarding.
+await fetch("/proxy", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "X-EnvGo-Token": token },
+  body: JSON.stringify({
+    target_url: "https://api.openai.com/v1/chat/completions",
+    headers: { Authorization: "Bearer {OPENAI_API_KEY}" },
+  }),
+});
+```
+
+The page above pairs with this `.env` — the `<div id="…">` elements and every
+`{…}` placeholder must match a key in the file:
+
+```env title=".env"
+MY_SECRET=some-real-value
+OPENAI_API_KEY=sk-your-real-key-here
+HOST=127.0.0.1
+PORT=8080
+```
+
+`HOST` and `PORT` are not secrets — they choose where `envgo run dev` listens, so
+changing `PORT=8080` to `PORT=3000` makes it serve `http://127.0.0.1:3000/`
+instead. They only apply to `envgo run` and `envgo run dev`; a flag like
+`--port 4000` overrides them.
+
+## Choose a mode
+
+| | Local mode | Public mode |
+|---|-----------|-------------|
+| Enable with | *(default)* | `--config envgo.routes.json` |
+| Browser calls | `/proxy` with a session token | `/api/<name>`, no token |
+| Target URL comes from | The browser, restricted by `--allow` | The config file |
+| Rate limiting | None | Per-route, per-IP |
+| Use for | Development and private tools | Anything publicly reachable |
+
+## Documentation map
+
+<CardGrid>
+  <Card title="Getting Started" icon="rocket">
+    [Introduction](/getting-started/introduction) ·
+    [Installation](/getting-started/installation) ·
+    [Quick Start](/getting-started/quick-start)
+  </Card>
+  <Card title="Core Concepts" icon="open-book">
+    [How It Works](/core-concepts/how-it-works) ·
+    [Security Model](/core-concepts/security-model) ·
+    [Environment Variables](/core-concepts/environment-variables)
+  </Card>
+  <Card title="Modes" icon="random">
+    [Local Mode](/modes/local-mode) ·
+    [Public Mode](/modes/public-mode)
+  </Card>
+  <Card title="Guides" icon="pencil">
+    [Deploy to VPS](/guides/deploy-to-vps) ·
+    [TLS / HTTPS](/guides/tls-https) ·
+    [PHP Support](/guides/php-support) ·
+    [Docker](/guides/docker-deployment)
+  </Card>
+  <Card title="Reference" icon="list-format">
+    [CLI Commands](/reference/cli-commands) ·
+    [Configuration](/reference/configuration) ·
+    [Threat Model](/reference/threat-model)
+  </Card>
+</CardGrid>
+
+## Known limitations
+
+envGo is deliberately small, and it is worth knowing what that costs:
+
+- **Streaming responses are not redacted.** SSE passthrough skips scrubbing, so an
+  upstream that echoes a key inside a stream will leak it to the browser.
+- **`default_rate_limit` is empty by default**, which means *unlimited*. Rate
+  limiting must be opted into explicitly.
+- **If PHP is unavailable or fails, the `.php` source is served as a file** rather
+  than producing an error.
+- **Rate limiting is per process.** Multiple instances each enforce their own
+  limit, and behind a proxy without `trust_proxy: true` all clients share one
+  bucket.
+- **The session token is not user authentication.** It is per process, has no
+  expiry, and any page on your own origin can fetch it.
+
+The full list is in the [Threat Model](/reference/threat-model).

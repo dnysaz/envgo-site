@@ -1,0 +1,144 @@
+---
+title: Download
+description: Download the envGo binary for macOS, Linux, or Windows
+---
+
+envGo ships as a single executable per platform. Nothing else needs to be
+installed — no runtime, no package manager, no dependencies.
+
+**Latest release: v1.0.0**
+
+## Direct downloads
+
+These links always point at the newest release, so they stay valid across
+versions. Replace `latest` with a tag such as `v1.0.0` if you need to pin one.
+
+| Platform | File | Download |
+|----------|------|----------|
+| macOS, Apple Silicon | `envGo-macOS-AppleSilicon.zip` | [Download](https://github.com/dnysaz/envgo/releases/latest/download/envGo-macOS-AppleSilicon.zip) |
+| macOS, Intel | `envGo-macOS-Intel.zip` | [Download](https://github.com/dnysaz/envgo/releases/latest/download/envGo-macOS-Intel.zip) |
+| Linux, amd64 | `envgo-linux-amd64` | [Download](https://github.com/dnysaz/envgo/releases/latest/download/envgo-linux-amd64) |
+| Linux, arm64 | `envgo-linux-arm64` | [Download](https://github.com/dnysaz/envgo/releases/latest/download/envgo-linux-arm64) |
+| Windows, amd64 | `envgo-windows-amd64.exe` | [Download](https://github.com/dnysaz/envgo/releases/latest/download/envgo-windows-amd64.exe) |
+| Windows, arm64 | `envgo-windows-arm64.exe` | [Download](https://github.com/dnysaz/envgo/releases/latest/download/envgo-windows-arm64.exe) |
+
+Not sure which you need? Run `uname -m` on macOS or Linux: `arm64` or `aarch64`
+means the ARM build, `x86_64` means amd64.
+
+Browse every version at
+[github.com/dnysaz/envgo/releases](https://github.com/dnysaz/envgo/releases).
+
+## Verify the download
+
+Every release includes a `SHA256SUMS` file listing the hash of each asset.
+Download it alongside the binary and check:
+
+```bash
+# Linux
+sha256sum -c SHA256SUMS
+
+# macOS
+shasum -a 256 -c SHA256SUMS
+```
+
+```powershell
+# Windows PowerShell, one file at a time
+Get-FileHash .\envgo-windows-amd64.exe -Algorithm SHA256
+```
+
+## Install
+
+### macOS
+
+The ZIP contains the binary plus an installer script:
+
+1. Extract the archive for your chip
+2. Double-click `Install_envGo.command` — it installs to `~/.local/bin/envgo`
+3. Open a new terminal and run `envgo -v`
+
+If Gatekeeper refuses to open the script, right-click it and choose **Open**, or
+clear the quarantine flag:
+
+```bash
+xattr -dr com.apple.quarantine envGo-macOS-AppleSilicon
+```
+
+Manual equivalent:
+
+```bash
+mkdir -p ~/.local/bin
+cp envGo-macOS-AppleSilicon/dist/envgo-darwin-arm64 ~/.local/bin/envgo
+chmod +x ~/.local/bin/envgo
+```
+
+### Linux
+
+```bash
+uname -m      # x86_64 = amd64, aarch64 = arm64
+
+sudo cp envgo-linux-amd64 /usr/local/bin/envgo
+sudo chmod +x /usr/local/bin/envgo
+```
+
+Or install per-user without sudo:
+
+```bash
+mkdir -p ~/.local/bin
+cp envgo-linux-amd64 ~/.local/bin/envgo
+chmod +x ~/.local/bin/envgo
+```
+
+### Windows
+
+```powershell
+mkdir C:\envgo
+copy envgo-windows-amd64.exe C:\envgo\envgo.exe
+```
+
+Then add `C:\envgo` to your `PATH` through **System Properties → Environment
+Variables**, or:
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  "Path",
+  [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\envgo",
+  "User"
+)
+```
+
+Open a new terminal afterwards. SmartScreen may warn on first run because the
+binary is not code-signed — choose **More info → Run anyway**.
+
+## Verify the install
+
+```bash
+envgo -v     # envGo v1.0.0
+envgo -h     # full flag reference
+```
+
+## Next step
+
+```bash
+mkdir myapp && cd myapp
+envgo init
+envgo run dev
+```
+
+Continue with the [Quick Start](/getting-started/quick-start) walkthrough, or see
+[Installation](/getting-started/installation) for the full install reference
+including uninstall instructions.
+
+## What is in each build
+
+All six builds come from the same source and expose identical functionality:
+
+- static file server with path-traversal and dotfile protection
+- local-mode `/proxy` with session token, `Host` and `Origin` guards
+- public-mode `/api/<name>` gateway with per-route variable allow-sets, rate
+  limiting, optional bearer auth, and response scrubbing
+- `.env` hot reload
+- dashboard, typo detection, PHP execution, and `--tls`
+
+The Linux and Windows binaries are UPX-compressed to roughly 2–3 MB. The macOS
+binaries are left uncompressed at roughly 7.5–8 MB, because compressing a Mach-O
+binary breaks code signing on Apple Silicon.

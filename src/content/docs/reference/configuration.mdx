@@ -1,0 +1,297 @@
+---
+title: Configuration
+description: Complete reference for the public-mode routes JSON file
+---
+
+Public mode is enabled by passing `--config <file>`. The file defines every
+outbound endpoint envGo may call; the browser can only reference routes **by
+name** and can never choose a target URL.
+
+The example name used throughout these docs is `envgo.routes.json`, but any
+filename works — that is just a convention.
+
+## How the file is loaded
+
+- The file is read once at startup. Restart envGo after editing it. (Only `.env`
+  is hot-reloaded.)
+- Parsing is **strict**: an unknown field is an error, not a warning. A typo like
+  `"scrub_respones"` fails the load with `json: unknown field "…"` instead of
+  being silently ignored. This is intentional — it catches mistakes early.
+- A config with no routes fails with `config <path> has no routes`.
+- A name that appears twice (case-insensitively) fails with
+  `duplicate route name`.
+
+## Top-level fields
+
+```json
+{
+  "trust_proxy": false,
+  "default_rate_limit": "",
+  "scrub_response": false,
+  "routes": []
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `trust_proxy` | bool | `false` | Read the client IP from `X-Forwarded-For`. Enable **only** behind a reverse proxy you control |
+| `default_rate_limit` | string | *(empty)* | Rate limit for routes that do not set their own. Empty means **unlimited** |
+| `scrub_response` | bool | `false` | Redact known secret values from non-streaming response bodies |
+| `routes` | array | `[]` | Route definitions. Must contain at least one entry |
+
+:::danger[There is no built-in default rate limit]
+`default_rate_limit` defaults to **empty**, and an empty spec means *unlimited*.
+envGo does **not** fall back to `30/min` or any other value. If you want
+protection you must set `default_rate_limit` or a per-route `rate_limit`
+explicitly.
+:::
+
+## Route fields
+
+```json
+{
+  "name": "chat",
+  "method": "POST",
+  "target": "https://api.openai.com/v1/chat/completions",
+  "vars": ["OPENAI_API_KEY"],
+  "inject": {
+    "query": { "key": "{OPENAI_API_KEY}" },
+    "headers": { "Authorization": "Bearer {OPENAI_API_KEY}" },
+    "body": { "model": "gpt-4" }
+  },
+  "rate_limit": "20/min",
+  "auth": { "type": "bearer", "secret": "CLIENT_SECRET" }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | URL segment served at `/api/<name>`. Matched case-insensitively |
+| `target` | string | Yes | Upstream URL. **Must** start with `https://` |
+| `method` | string | No | Allowed method(s). Defaults to `POST` |
+| `vars` | array | Yes | Allow-set of env var names this route may substitute |
+| `inject.query` | object | No | Query params added to the upstream request |
+| `inject.headers` | object | No | Headers added to the upstream request |
+| `inject.body` | object | No | JSON fields merged into the request body |
+| `rate_limit` | string | No | Per-route limit. Overrides `default_rate_limit` |
+| `auth` | object | No | Bearer token requirement |
+
+### Validation rules
+
+envGo validates every route at startup and refuses to boot if anything is wrong:
+
+| Rule | Error |
+|------|-------|
+| `name` must match `^[A-Za-z0-9_-]+$` | `invalid name "…" (use letters, digits, - and _)` |
+| `target` must start with `https://` | `route "…": target must be https` |
+| `method` must be a known HTTP method | `route "…": invalid method "…"` |
+| `auth.type` must be `"bearer"` | `route "…": auth.type must be "bearer"` |
+| `auth.secret` must be non-empty | `route "…": auth.secret is required` |
+| `rate_limit` must parse | `route "…": invalid rate limit …` |
+| inject keys must match `^[A-Za-z0-9_-]+$` | `invalid query key "…"` |
+
+### Multiple methods
+
+`method` accepts a comma-separated list. The route then answers to any of them,
+and the `Allow` header on a `405` lists them all:
+
+```json
+{ "name": "items", "method": "GET,POST", "target": "https://api.example.com/items" }
+```
+
+### HTTPS is mandatory
+
+Plain HTTP targets are rejected both at config load and at request time. There is
+no flag to disable this.
+
+## Rate limit syntax
+
+The format is `<count>/<unit>`. `" per "` is also accepted, so `"20 per min"`
+works.
+
+| Spec | Meaning |
+|------|---------|
+| `20/min` | 20 requests per minute |
+| `5/s` | 5 requests per second |
+| `100/hour` | 100 requests per hour |
+| *(empty)* or `0` | Unlimited |
+
+Units accepted: `s`, `sec`, `second`, `seconds`, `m`, `min`, `minute`,
+`minutes`, `h`, `hour`, `hours`.
+
+Limits are tracked **per route, per client IP** using a fixed-window counter held
+in memory. Details that matter in practice:
+
+- Counters live in the process only. Restarting envGo resets them.
+- Running multiple instances behind a load balancer gives each instance its own
+  window, so the effective limit is multiplied.
+- When `trust_proxy` is `false`, the client IP is the TCP peer address. Behind a
+  proxy without `trust_proxy: true`, **all** requests share one bucket, because
+  they all appear to come from the proxy.
+- Exceeding a limit returns `429` with `{"error":"rate limit exceeded"}` and a
+  `Retry-After: 60` header.
+
+## Variable substitution
+
+Placeholders have the form `{NAME}` and are recognised in:
+
+- `target` (yes, the target URL itself)
+- client-supplied query parameter values
+- `inject.query` values
+- client-supplied header values
+- `inject.headers` values
+- the request body (when it is text or JSON)
+
+### The `vars` allow-set is enforced
+
+A placeholder is only substituted if its name is listed in the route's `vars`
+array **and** the variable exists in `.env`. Otherwise the whole request fails
+with `400`:
+
+```json
+{ "error": "variable not available for this route" }
+```
+
+Placeholders are never silently dropped, and a route can never reach a variable
+it did not declare. This is what stops one route from leaking another route's
+secrets.
+
+### Placeholder name pattern
+
+Only names matching `[A-Za-z_][A-Za-z0-9_]*` are treated as placeholders. A
+literal string such as `{not a var}` or `{"json":"body"}` is left untouched,
+which is why JSON request bodies pass through safely.
+
+## Request handling details
+
+These behaviours are worth knowing when debugging:
+
+- **Blocked client headers.** These are stripped from the incoming request and
+  never forwarded: `Host`, `Connection`, `Keep-Alive`, `Proxy-Authenticate`,
+  `Proxy-Authorization`, `Proxy-Connection`, `TE`, `Trailer`,
+  `Transfer-Encoding`, `Upgrade`, `Content-Length`, `Accept-Encoding`,
+  `Authorization`, `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto`.
+  Because `Authorization` is stripped, a client **cannot** override a credential
+  that a route injects.
+- **Client query parameters are forwarded** to the upstream, with substitution
+  applied. Values from `inject.query` override a same-named client parameter.
+- **`inject.body` requires a JSON request body.** If `inject.body` is set, the
+  client body is parsed as JSON, the injected fields are merged on top (route
+  values win), and the result is sent upstream. A non-JSON body then fails with
+  `400 invalid JSON body`.
+- **Limits.** Request bodies are capped at 16 MB. When scrubbing is on,
+  responses are capped at 32 MB. The upstream client timeout is 60 seconds.
+- **Route paths are single-segment.** `/api/chat` works; `/api/chat/extra`
+  returns `404`.
+
+## Response scrubbing
+
+When `scrub_response` is `true`, envGo replaces every known secret **value**
+found in the response body with `[REDACTED]`.
+
+```json
+{
+  "api_key": "sk-live-abc123",
+  "data": "some data"
+}
+```
+
+```json
+{
+  "api_key": "[REDACTED]",
+  "data": "some data"
+}
+```
+
+:::caution[Streaming responses are never scrubbed]
+If the upstream response looks like a stream — its `Content-Type` starts with
+`text/event-stream` or contains `stream` — the bytes are piped straight through
+and scrubbing is skipped, because buffering would break streaming. If an upstream
+echoes your key inside an SSE stream, that key reaches the browser. Keep this in
+mind for streaming LLM endpoints.
+:::
+
+Scrubbing also applies to the request history shown on the dashboard, and to log
+lines, via the redacting logger.
+
+## Bearer auth
+
+```json
+{ "auth": { "type": "bearer", "secret": "CLIENT_SECRET" } }
+```
+
+`secret` is the **name of an env var**, not the token itself. The client must
+send `Authorization: Bearer <value of that env var>`. The comparison is
+constant-time, and an unset or empty env var means every request is rejected.
+
+Failure returns `401` with `{"error":"unauthorized"}`.
+
+## Route matching and `405`
+
+`/api/<name>` is matched case-insensitively. If the path matches but the method
+does not, envGo returns `405` with an `Allow` header listing the permitted
+methods and a JSON body:
+
+```json
+{ "error": "method not allowed for route" }
+```
+
+## Full example
+
+This is a complete, working example config. It is illustrative — swap in your own
+hosts, env var names, and limits:
+
+```json
+{
+  "trust_proxy": false,
+  "default_rate_limit": "30/min",
+  "scrub_response": true,
+  "routes": [
+    {
+      "name": "chat",
+      "method": "POST",
+      "target": "https://api.openai.com/v1/chat/completions",
+      "vars": ["OPENAI_API_KEY"],
+      "inject": {
+        "headers": { "Authorization": "Bearer {OPENAI_API_KEY}" }
+      },
+      "rate_limit": "20/min"
+    },
+    {
+      "name": "gemini",
+      "method": "POST",
+      "target": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+      "vars": ["GEMINI_API_KEY"],
+      "inject": {
+        "query": { "key": "{GEMINI_API_KEY}" }
+      },
+      "rate_limit": "20/min"
+    },
+    {
+      "name": "items",
+      "method": "GET,POST",
+      "target": "https://api.example.com/v1/items",
+      "vars": ["INTERNAL_TOKEN"],
+      "inject": {
+        "headers": { "X-Internal-Token": "{INTERNAL_TOKEN}" }
+      },
+      "auth": { "type": "bearer", "secret": "CLIENT_SECRET" }
+    }
+  ]
+}
+```
+
+The matching `.env` for that config:
+
+```env
+OPENAI_API_KEY=sk-your-real-key
+GEMINI_API_KEY=your-gemini-key
+INTERNAL_TOKEN=some-internal-token
+CLIENT_SECRET=a-long-random-client-token
+```
+
+## Next steps
+
+- [Public Mode](/modes/public-mode) — how the gateway behaves at runtime
+- [CLI Commands](/reference/cli-commands) — enabling the config with `--config`
+- [Threat Model](/reference/threat-model) — what these settings protect against

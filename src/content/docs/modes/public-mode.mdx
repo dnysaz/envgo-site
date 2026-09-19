@@ -1,0 +1,420 @@
+---
+title: Public Mode
+description: Production API gateway with fixed routes and server-side secrets
+---
+
+Public mode is enabled by passing `--config <file>`. envGo stops accepting
+arbitrary target URLs and instead serves a fixed set of routes at
+`/api/<name>`. The browser picks a route name and a payload — never a destination.
+
+This is the mode to use whenever other people can reach the server.
+
+## When to use it
+
+- Production deployments
+- Serving a frontend that must not be able to pick target URLs
+- Centralising secret management across several frontends
+- Anywhere you need rate limiting or optional client auth
+
+## Flow
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│                    Public Mode Flow                     │
+├─────────────────────────────────────────────────────────┤
+│  1. Browser → POST /api/chat                            │
+│       { contents: [{ parts: [{ text: "Hello" }] }] }    │
+│  2. envGo   → looks up route "chat" in the config       │
+│  3. envGo   → optional bearer auth check                │
+│  4. envGo   → rate limit check (per route, per IP)      │
+│  5. envGo   → substitutes {NAME} using ONLY the route's │
+│               vars allow-set                            │
+│  6. envGo   → forwards upstream on https                │
+│  7. envGo   → optionally redacts secrets in the         │
+│               response, then returns it                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+## What changes when you enable it
+
+| | Local mode | Public mode |
+|---|-----------|-------------|
+| `/api/<name>` | Not served | Served from config |
+| `/proxy` | Available | **`404`** |
+| `/__envgo_token` | Available | **`404`** |
+| `/__env/...` | Blocked | `404` |
+| Dashboard | Always on | Off unless `--dashboard` |
+| Target URL chosen by | The browser | The config file |
+| Rate limiting | None | Per-route, per-IP |
+| Bearer auth | None | Optional per route |
+
+Because the token endpoint is gone, `/history` is only reachable with a token you
+already hold — from the browser you cannot fetch one in public mode.
+
+## Quick start
+
+### 1. Create the routes config
+
+The filename is up to you; `envgo.routes.json` is the convention used here. This
+is an **example** — replace the targets, variable names, and limits:
+
+```json title="envgo.routes.json"
+{
+  "trust_proxy": false,
+  "default_rate_limit": "30/min",
+  "scrub_response": true,
+  "routes": [
+    {
+      "name": "chat",
+      "method": "POST",
+      "target": "https://api.openai.com/v1/chat/completions",
+      "vars": ["OPENAI_API_KEY"],
+      "inject": {
+        "headers": { "Authorization": "Bearer {OPENAI_API_KEY}" }
+      },
+      "rate_limit": "20/min"
+    },
+    {
+      "name": "gemini",
+      "method": "POST",
+      "target": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+      "vars": ["GEMINI_API_KEY"],
+      "inject": {
+        "query": { "key": "{GEMINI_API_KEY}" }
+      },
+      "rate_limit": "20/min"
+    }
+  ]
+}
+```
+
+### 2. Add the matching `.env`
+
+```env
+OPENAI_API_KEY=sk-your-real-key
+GEMINI_API_KEY=your-gemini-key
+```
+
+### 3. Start the server
+
+```bash
+envgo --config envgo.routes.json --env .env --dir . --host 127.0.0.1 --port 8080
+```
+
+Startup logs the compiled routes:
+
+```text
+[envGo] PUBLIC MODE: 2 route(s) from envgo.routes.json (/proxy and token endpoints disabled)
+[envGo]   /api/chat -> https://api.openai.com/v1/chat/completions
+[envGo]   /api/gemini -> https://generativelanguage.googleapis.com/...
+```
+
+If a route references a variable that is not in `.env` yet, envGo prints a
+warning at startup and the route returns `400` until you add it.
+
+### 4. Call from the frontend
+
+```javascript
+// No token needed — the upstream is fixed in the config
+const res = await fetch("/api/chat", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    model: "gpt-4",
+    messages: [{ role: "user", content: "Hello!" }],
+  }),
+});
+
+const data = await res.json();
+```
+
+## Configuration reference
+
+The full field-by-field reference, including validation rules and the strict
+parser behaviour, lives on its own page:
+[Configuration](/reference/configuration).
+
+The essentials:
+
+| Field | Default | Note |
+|-------|---------|------|
+| `trust_proxy` | `false` | Read client IP from `X-Forwarded-For` |
+| `default_rate_limit` | *(empty)* | **Empty means unlimited** — there is no built-in default |
+| `scrub_response` | `false` | Redact secret values from non-streaming responses |
+| `routes[].name` | — | URL segment, matched case-insensitively |
+| `routes[].target` | — | Must be `https://` |
+| `routes[].method` | `POST` | Comma-separated list allowed, e.g. `"GET,POST"` |
+| `routes[].vars` | — | Allow-set of env var names for this route |
+| `routes[].rate_limit` | inherits default | Per-route override |
+
+:::danger[Rate limiting is opt-in]
+`default_rate_limit` has **no** default value, and an empty spec means unlimited.
+A config that omits both `default_rate_limit` and `rate_limit` serves every route
+without any throttling. Set one of them explicitly.
+:::
+
+### Rate limit syntax
+
+```json
+{
+  "rate_limit": "20/min"
+}
+```
+
+| Spec | Meaning |
+|------|---------|
+| `20/min` | 20 requests per minute |
+| `5/s` | 5 requests per second |
+| `100/hour` | 100 requests per hour |
+| `""` or `"0"` | Unlimited |
+
+Limits are counted per route, per client IP, in a fixed window held in memory.
+Exceeding one returns `429` with `{"error":"rate limit exceeded"}` and a
+`Retry-After: 60` header.
+
+### Auth config
+
+```json
+{
+  "auth": { "type": "bearer", "secret": "CLIENT_SECRET" }
+}
+```
+
+`secret` names an env var — it is not the token itself. Clients must send
+`Authorization: Bearer <value of that env var>`. Comparison is constant-time, and
+an unset secret rejects everything with `401`.
+
+## Worked examples
+
+All examples below are illustrative. Replace hosts, variable names, models, and
+limits with your own.
+
+### Server-side API key in a header
+
+```json
+{
+  "name": "chat",
+  "method": "POST",
+  "target": "https://api.openai.com/v1/chat/completions",
+  "vars": ["OPENAI_API_KEY"],
+  "inject": {
+    "headers": { "Authorization": "Bearer {OPENAI_API_KEY}" }
+  },
+  "rate_limit": "20/min"
+}
+```
+
+### Server-side API key in a query parameter
+
+Some APIs take the credential as a query parameter instead of a header:
+
+```json
+{
+  "name": "gemini",
+  "method": "POST",
+  "target": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+  "vars": ["GEMINI_API_KEY"],
+  "inject": {
+    "query": { "key": "{GEMINI_API_KEY}" }
+  },
+  "rate_limit": "20/min"
+}
+```
+
+### Several variables in one route
+
+```json
+{
+  "name": "multi",
+  "method": "POST",
+  "target": "https://api.example.com/v1/chat",
+  "vars": ["PRIMARY_KEY", "TENANT_ID"],
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {PRIMARY_KEY}",
+      "X-Tenant": "{TENANT_ID}"
+    }
+  }
+}
+```
+
+### Forcing a body field the client cannot change
+
+Values in `inject.body` are merged on top of the client's JSON, so route values
+win. This is how you pin a model, a temperature, or a tenant:
+
+```json
+{
+  "name": "pinned",
+  "method": "POST",
+  "target": "https://api.openai.com/v1/chat/completions",
+  "vars": ["OPENAI_API_KEY"],
+  "inject": {
+    "headers": { "Authorization": "Bearer {OPENAI_API_KEY}" },
+    "body": { "model": "gpt-4o-mini", "temperature": 0.2 }
+  }
+}
+```
+
+A client sending `{"model": "gpt-4"}` gets `gpt-4o-mini` forwarded, because the
+route's value is applied last.
+
+### Client-authenticated route
+
+```json
+{
+  "name": "protected",
+  "method": "POST",
+  "target": "https://api.example.com/v1/endpoint",
+  "vars": ["API_KEY"],
+  "inject": {
+    "headers": { "Authorization": "Bearer {API_KEY}" }
+  },
+  "auth": { "type": "bearer", "secret": "CLIENT_SECRET" }
+}
+```
+
+```javascript
+const res = await fetch("/api/protected", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: "Bearer " + clientSecret, // value of CLIENT_SECRET
+  },
+  body: JSON.stringify({ data: "value" }),
+});
+```
+
+### Read-only route
+
+```json
+{
+  "name": "items",
+  "method": "GET",
+  "target": "https://api.example.com/v1/items",
+  "vars": ["INTERNAL_TOKEN"],
+  "inject": { "headers": { "X-Internal-Token": "{INTERNAL_TOKEN}" } }
+}
+```
+
+## Response scrubbing
+
+With `scrub_response: true`, envGo replaces known secret **values** in the
+response body with `[REDACTED]`:
+
+```json
+// upstream returned
+{ "api_key": "sk-live-abc123", "data": "some data" }
+```
+
+```json
+// browser receives
+{ "api_key": "[REDACTED]", "data": "some data" }
+```
+
+:::caution[Streaming responses are not scrubbed]
+If the response looks like a stream (`text/event-stream`, or a `Content-Type`
+containing `stream`) the bytes are forwarded as-is and redaction is skipped so
+streaming keeps working. If an upstream echoes a secret inside a stream, the
+browser will see it.
+:::
+
+## Endpoint behaviour details
+
+Useful when debugging a route that "should" work:
+
+- **Blocked client headers.** `Host`, `Connection`, `Authorization`,
+  `Content-Length`, `Accept-Encoding`, `Transfer-Encoding`, `Upgrade`, and the
+  `X-Forwarded-*` family are stripped from the incoming request. Because
+  `Authorization` is stripped, a client cannot override a credential that a route
+  injects.
+- **Query parameters are forwarded** with substitution applied. Values from
+  `inject.query` override same-named client parameters.
+- **`inject.body` requires JSON.** The client body is parsed, injected fields are
+  merged on top, and the result is sent. A non-JSON body then fails with
+  `400 invalid JSON body`.
+- **Single-segment routes.** `/api/chat` works; `/api/chat/extra` is `404`.
+- **Case-insensitive names.** A route named `Chat` is reachable at `/api/chat`.
+- **Limits.** 16 MB request bodies, 32 MB responses when scrubbing, 60-second
+  upstream timeout.
+
+## Deployment
+
+### Behind a reverse proxy (recommended)
+
+```bash
+# envGo listens on localhost only
+envgo --config envgo.routes.json --env .env --host 127.0.0.1 --port 8080
+```
+
+```text title="/etc/caddy/Caddyfile"
+yourdomain.com {
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
+Then set `"trust_proxy": true` in the routes config so rate limiting sees real
+client IPs instead of the proxy's — **only** do this when a proxy you control is
+actually in front.
+
+Full walkthrough: [Deploy to VPS](/guides/deploy-to-vps).
+
+### Direct binding
+
+```bash
+envgo --config envgo.routes.json --env .env --host 0.0.0.0 --port 8080
+```
+
+Only do this if something else provides TLS and network filtering. Without
+`trust_proxy`, all requests share one rate-limit bucket because the peer address
+is the same for everyone behind NAT.
+
+## Debugging
+
+### Inspect the compiled routes
+
+```bash
+envgo --config envgo.routes.json --env .env --debug
+```
+
+Startup prints the route table, so a mistyped target is visible immediately.
+
+### Enable the dashboard
+
+```bash
+envgo --config envgo.routes.json --env .env --dashboard
+```
+
+```text
+http://127.0.0.1:8080/__envgo_dashboard
+```
+
+It shows variable names and recent request metadata — never values. Keep it off
+on anything publicly reachable.
+
+### Common errors
+
+| Message | Cause | Fix |
+|---------|-------|-----|
+| `{"error":"variable not available for this route"}` | A `{NAME}` used by the route is not listed in `vars`, or is missing from `.env` | Add it to both |
+| `{"error":"rate limit exceeded"}` | Too many requests from this IP for this route | Wait, or raise the limit |
+| `{"error":"unauthorized"}` | Bearer auth failed | Send `Authorization: Bearer <value of auth.secret>` |
+| `{"error":"method not allowed for route"}` | Method not in `routes[].method` | Check the `Allow` response header |
+| `{"error":"route not available"}` at startup | Config failed to load | Read the exact error — the parser is strict about unknown fields |
+
+## Best practices
+
+1. **Set a rate limit** — it is opt-in and empty means unlimited
+2. **`trust_proxy: true` only behind a proxy you control**, never on a directly
+   exposed instance (it lets clients forge their own IP)
+3. **List the minimum in `vars`** — one route, one purpose
+4. **Enable `scrub_response`** if upstreams might echo credentials
+5. **Use bearer auth** for routes that should not be publicly callable
+6. **Leave the dashboard off** in public mode
+7. **Pin sensitive body fields** with `inject.body` so clients cannot override them
+
+## Next steps
+
+- [Configuration](/reference/configuration) — full routes JSON reference
+- [Threat Model](/reference/threat-model) — what each guard protects against
+- [Deploy to VPS](/guides/deploy-to-vps) — production deployment

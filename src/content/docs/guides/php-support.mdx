@@ -1,0 +1,318 @@
+---
+title: PHP Support
+description: Execute PHP server-side with .env variables injected
+---
+
+If a PHP interpreter is installed, envGo will execute `.php` files server-side
+instead of serving them as static text, and will pass every `.env` variable into
+the PHP process. This lets existing PHP pages use the same secret management as
+your HTML and JavaScript.
+
+PHP support is **optional**. If PHP is not installed, envGo still runs — but
+`.php` files are then served as static downloads. See
+[the important caveat](#the-fall-through-caveat) below.
+
+## How it works
+
+1. A request resolves to a file ending in `.php`
+2. envGo looks for a PHP interpreter on `PATH`
+3. It runs `php <path>` with every `.env` variable added to the process environment
+4. It also adds `REQUEST_METHOD`, `QUERY_STRING`, and `REQUEST_URI`
+5. The script's output is returned to the browser
+6. The source is scanned for typos and for patterns that expose secrets
+
+```text
+Browser → /index.php → envGo → php <path> → response
+                          │
+                          └─ every .env variable injected into the process env
+```
+
+## Requirements
+
+envGo looks for an interpreter in this order, using the first one found:
+
+1. `php`
+2. `php8`
+3. `php8.2`
+4. `php8.1`
+5. `php7`
+
+Install PHP if none of these resolve:
+
+```bash
+# Debian / Ubuntu
+sudo apt install -y php
+
+# macOS (Homebrew)
+brew install php
+
+# Fedora / RHEL family
+sudo dnf install -y php
+```
+
+## Basic usage
+
+```php showLineNumbers title="index.php"
+<?php
+// Example: check the key exists without revealing it
+$secret = getenv("MY_SECRET");
+
+if (!$secret) {
+    echo "<h1>Error: MY_SECRET not configured</h1>";
+} else {
+    echo "<h1>Secret validated (value hidden)</h1>";
+}
+?>
+```
+
+```env title=".env"
+MY_SECRET=your-secret-value
+```
+
+```bash
+envgo run dev
+```
+
+Then open `http://127.0.0.1:8080/index.php`.
+
+Directories also work: with no path, envGo tries `index.html`, then `index.php`,
+then `index.htm`.
+
+## Accessing variables
+
+All three styles work, because envGo places every `.env` variable in the process
+environment:
+
+```php
+<?php
+// 1. getenv()
+$secret = getenv("MY_SECRET");
+
+// 2. $_ENV superglobal
+$secret = $_ENV["MY_SECRET"];
+
+// 3. $_SERVER superglobal
+$secret = $_SERVER["MY_SECRET"];
+?>
+```
+
+envGo also sets the following, so request-aware scripts work:
+
+| Variable | Contents |
+|----------|----------|
+| `REQUEST_METHOD` | The HTTP method, e.g. `GET` |
+| `QUERY_STRING` | The raw query string, e.g. `foo=bar` |
+| `REQUEST_URI` | The request path plus query string |
+
+Every variable in `.env` is injected — there is no per-file allowlist. Any PHP
+file in the served directory can read any `.env` variable, so treat your web root
+as trusted code.
+
+## Typo detection
+
+envGo scans the PHP source for `getenv("…")`, `$_ENV["…"]`, and `$_SERVER["…"]`
+and checks each name against `.env`. An unknown name triggers a red banner:
+
+```php
+<?php $secret = getenv("MY_SECRETS"); // typo ?>
+```
+
+```text
+envGo — PHP env typo: undefined variable MY_SECRETS not found in .env.
+Did you mean 'MY_SECRET'?
+```
+
+The suggestion is the closest key by Levenshtein distance, up to a threshold of 3.
+The banner is injected into the response, so it only appears for the request that
+triggered it.
+
+## Security warning
+
+envGo also scans for lines that both access a secret and print it to the browser.
+Matching is line-based, looking for `echo`, `print`, `var_dump`, or `print_r` on
+the same line as `getenv`, `$_ENV`, or `$_SERVER`.
+
+```php
+<?php
+echo getenv("MY_SECRET");   // DANGEROUS — triggers the banner
+print getenv("API_KEY");    // DANGEROUS
+var_dump(getenv("SECRET")); // DANGEROUS
+?>
+```
+
+```text
+envGo — SECURITY WARNING: getenv echoed to browser. Secrets exposed!
+Remove echo/print of getenv/$_ENV/$_SERVER.
+```
+
+### Safe patterns
+
+```php
+<?php
+// SAFE: report only whether the value is present
+$secret = getenv("MY_SECRET");
+if ($secret) {
+    echo "<p>Secret configured ✓</p>";
+} else {
+    echo "<p>Error: Secret not configured</p>";
+}
+
+// SAFE: use the value server-side, never print it
+$apiKey = getenv("OPENAI_API_KEY");
+if ($apiKey) {
+    // make the outbound call here
+}
+
+// SAFE: conditional display without the value
+$secret = getenv("MY_SECRET");
+echo "<p>Variable exists: " . ($secret ? "Yes" : "No") . "</p>";
+?>
+```
+
+These checks are **heuristic source scans**, not a security boundary. Because
+matching is line-based, a secret printed across two lines, or passed through a
+variable, will not be flagged. Treat the banners as helpful hints, not as
+guarantees.
+
+## Timeout
+
+Each PHP request has a **30-second** limit, enforced with a context-aware command:
+
+```php
+<?php
+sleep(60); // killed at 30 seconds
+?>
+```
+
+## The fall-through caveat
+
+:::danger[A failed PHP execution serves the source file]
+If envGo cannot run PHP — the interpreter is missing, the script exits non-zero,
+or it times out — `servePHP` reports failure and the static file handler takes
+over. The browser then receives the **`.php` file as a download**, with its source
+intact, including any secrets, comments, or logic embedded in it.
+
+There is no error page for this case. Only deploy `.php` files where you have
+verified that a PHP interpreter is installed and your scripts exit cleanly. Test
+with:
+
+```bash
+php -v
+```
+:::
+
+You can confirm which side of the fall-through you are on by requesting the file
+and checking whether the browser renders HTML or offers a download.
+
+## Complete example
+
+This is a full, working page. The variable names are illustrative — swap them for
+your own.
+
+```php showLineNumbers title="index.php"
+<?php
+$secret = getenv("MY_SECRET");
+$apiKey = getenv("OPENAI_API_KEY");
+
+$errors = [];
+if (!$secret) $errors[] = "MY_SECRET";
+if (!$apiKey) $errors[] = "OPENAI_API_KEY";
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>envGo PHP Demo</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 8px; }
+        .ok { background: #d1fae5; color: #065f46; }
+        .error { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+    <h1>envGo PHP Demo</h1>
+
+    <?php if (empty($errors)): ?>
+        <div class="status ok">All environment variables configured ✓</div>
+    <?php else: ?>
+        <div class="status error">
+            Missing variables: <?php echo implode(", ", $errors); ?>
+        </div>
+    <?php endif; ?>
+
+    <h2>Variable Status</h2>
+    <ul>
+        <li>MY_SECRET: <?php echo $secret ? "✓ Set" : "✗ Missing"; ?></li>
+        <li>OPENAI_API_KEY: <?php echo $apiKey ? "✓ Set" : "✗ Missing"; ?></li>
+    </ul>
+
+    <p><em>Note: actual values are never displayed.</em></p>
+</body>
+</html>
+```
+
+```env title=".env"
+MY_SECRET=your-secret-value
+OPENAI_API_KEY=sk-your-real-key
+```
+
+```bash
+envgo run dev
+# → http://127.0.0.1:8080/index.php
+```
+
+## Custom response headers
+
+If a script's output begins with HTTP-style headers followed by a blank line,
+envGo forwards them:
+
+```php
+<?php
+header("Content-Type: application/json");
+echo json_encode(["ok" => true]);
+?>
+```
+
+Without a header block, the response is served as `text/html; charset=utf-8`.
+
+## Limitations
+
+Be aware of all of the following:
+
+1. **One process per request** — each request spawns a fresh `php` process, so
+   there is no in-process state carried between requests
+2. **30-second timeout** — long-running scripts are terminated
+3. **A failed execution serves the source** — see the caveat above
+4. **All variables are injected** — there is no per-file allowlist
+5. **Requests are not recorded in the dashboard** — only `/proxy` and
+   `/api/<name>` calls appear in history, so PHP traffic is invisible there
+6. **Heuristic scanning only** — the typo and exposure checks are line-based
+   source scans, not taint tracking
+
+There is no restriction on PHP extensions. envGo simply runs the interpreter
+found on `PATH`, so every extension that installation provides is available.
+
+## Common issues
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Browser downloads the `.php` file | No interpreter found, or the script failed | Install PHP and check `php -v` |
+| Page hangs for 30 seconds then downloads | Script exceeded the timeout | Reduce work per request |
+| Red typo banner | A key in the script is not in `.env` | Fix the name or add the key |
+| Red security banner | A secret is printed to the browser | Stop echoing the value |
+| Variable is empty | Key missing from `.env`, or `.env` not loaded | Check the startup log for the variable count |
+
+## Best practices
+
+1. **Validate, never print** — report presence, not value
+2. **Confirm PHP is installed** in every environment where `.php` files are served
+3. **Keep the web root free of secrets** — remember the fall-through
+4. **Watch the startup log** — it tells you how many variables loaded
+5. **Prefer `/proxy` or `/api/<name>`** for new integrations; PHP support exists
+   mainly to modernise existing pages
+
+## Next steps
+
+- [Security Model](/core-concepts/security-model) — the PHP containment layer
+- [Environment Variables](/core-concepts/environment-variables) — the `.env` format
+- [Threat Model](/reference/threat-model) — known limitations

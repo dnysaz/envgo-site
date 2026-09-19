@@ -1,0 +1,564 @@
+---
+title: Quick Start
+description: A working envGo site in about five minutes on Windows, macOS, or Linux
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+This walkthrough takes you from nothing to a page that calls an API with a
+server-side key. Pick your platform as you go — the steps are otherwise identical.
+
+All values shown are **placeholders**. Replace them with your own.
+
+:::note[What you need]
+Just the envGo binary. No Node.js, no PHP, no runtime to install. If you have not
+put `envgo` on your `PATH` yet, see [Installation](/getting-started/installation).
+:::
+
+## Step 1 — Install envGo
+
+<Tabs>
+  <TabItem label="Windows">
+
+Download or copy the binary and put it on your `PATH`:
+
+```powershell
+mkdir C:\envgo
+copy dist\envgo-windows-amd64.exe C:\envgo\envgo.exe
+```
+
+For an ARM64 Windows machine use `envgo-windows-arm64.exe`.
+
+Add `C:\envgo` to your user `PATH`:
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  "Path",
+  [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\envgo",
+  "User"
+)
+```
+
+Open a **new** terminal so the change takes effect, then verify:
+
+```powershell
+envgo -v
+```
+
+:::tip[SmartScreen]
+The first run may show a SmartScreen warning because the binary is not
+code-signed. Choose **More info → Run anyway**. You can also add it to your
+`PATH` through **System Properties → Environment Variables** in the GUI instead
+of running the command above.
+:::
+
+  </TabItem>
+  <TabItem label="macOS">
+
+The release ZIP is the easiest route:
+
+1. Extract `envGo-macOS-AppleSilicon.zip` (M-series) or `envGo-macOS-Intel.zip`
+2. Double-click `Install_envGo.command` inside it
+3. Open a new terminal and verify
+
+Or install manually:
+
+```bash
+mkdir -p ~/.local/bin
+cp dist/envgo-darwin-arm64 ~/.local/bin/envgo      # Apple Silicon
+# cp dist/envgo-darwin-amd64 ~/.local/bin/envgo    # Intel
+chmod +x ~/.local/bin/envgo
+```
+
+Add it to `PATH` if it is not there yet:
+
+```bash
+echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.zshrc
+source ~/.zshrc
+envgo -v
+```
+
+:::tip[Gatekeeper]
+If macOS blocks the binary or the `.command` file, right-click it → **Open** →
+**Open**, or clear the quarantine flag:
+
+```bash
+xattr -dr com.apple.quarantine envGo-macOS-AppleSilicon
+```
+:::
+
+  </TabItem>
+  <TabItem label="Linux">
+
+```bash
+uname -m      # x86_64 → amd64, aarch64 → arm64
+
+# System-wide
+sudo cp dist/envgo-linux-amd64 /usr/local/bin/envgo
+sudo chmod +x /usr/local/bin/envgo
+
+# Or per-user, no sudo needed
+mkdir -p ~/.local/bin
+cp dist/envgo-linux-amd64 ~/.local/bin/envgo
+chmod +x ~/.local/bin/envgo
+```
+
+If you installed into `~/.local/bin`, make sure it is on `PATH`:
+
+```bash
+echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.bashrc
+source ~/.bashrc
+envgo -v
+```
+
+  </TabItem>
+</Tabs>
+
+## Step 2 — Create the project
+
+<Tabs>
+  <TabItem label="Windows">
+
+```powershell
+mkdir myapp
+cd myapp
+envgo init
+```
+
+  </TabItem>
+  <TabItem label="macOS">
+
+```bash
+mkdir myapp && cd myapp
+envgo init
+```
+
+  </TabItem>
+  <TabItem label="Linux">
+
+```bash
+mkdir myapp && cd myapp
+envgo init
+```
+
+  </TabItem>
+</Tabs>
+
+`envgo init` writes five files: `.env`, `.env.example`, `index.html`,
+`.gitignore`, and `README.md`.
+
+:::caution[`envgo init` overwrites existing files]
+It only checks whether the *directory* exists, and only when you pass `-name`.
+Running it in a folder that already has `index.html`, `README.md`, `.gitignore`,
+or `.env` overwrites them. Use `envgo init -name myapp` to create a fresh
+subdirectory instead.
+:::
+
+## Step 3 — Put a real key in `.env`
+
+`envgo init` filled `.env` with placeholders. Open it and replace them:
+
+```env title=".env"
+MY_SECRET=some-real-value
+OPENAI_API_KEY=sk-your-real-key-here
+HOST=127.0.0.1
+PORT=8080
+```
+
+### `HOST` and `PORT` are different from the others
+
+The first two keys become secrets that stay server-side. `HOST` and `PORT` do
+not — they tell `envgo run dev` **where to listen**, so editing them changes how
+you reach the server.
+
+| Key | Value shown | What changing it does |
+|-----|-------------|-----------------------|
+| `HOST` | `127.0.0.1` | Interface to bind. `127.0.0.1` accepts connections from this machine only. `0.0.0.0` also accepts other devices on your network |
+| `PORT` | `8080` | Port to listen on, and the port the browser opens. Setting `PORT=3000` means you get `http://127.0.0.1:3000/` |
+
+Change the port and run it again to see it take effect:
+
+```env title=".env"
+PORT=3000
+```
+
+```bash
+envgo run dev
+```
+
+```text
+[envGo] using PORT from .env: 3000
+[envGo] envGo running -> http://127.0.0.1:3000/
+```
+
+The browser opens on the new port, and the startup log confirms which value was
+picked up.
+
+Three rules apply:
+
+- They are read **only** by `envgo run` and `envgo run dev`. Plain `envgo` and
+  public mode (`--config …`) ignore them completely.
+- A command-line flag wins over the file. `envgo run dev --port 4000` uses 4000
+  and ignores `PORT` in `.env`.
+- Lowercase keys work too (`host`, `port`), and a leading colon is stripped, so
+  `PORT=:3000` is also valid.
+
+Full details are in
+[CLI Commands](/reference/cli-commands#host-and-port-from-env).
+
+### Open the file
+
+<Tabs>
+  <TabItem label="Windows">
+
+```powershell
+notepad .env
+```
+
+Save as **UTF-8**. Do not use PowerShell's `>` redirection to write `.env` —
+Windows PowerShell 5.1 writes UTF-16, which the parser cannot read.
+
+  </TabItem>
+  <TabItem label="macOS">
+
+```bash
+nano .env
+```
+
+  </TabItem>
+  <TabItem label="Linux">
+
+```bash
+nano .env
+```
+
+  </TabItem>
+</Tabs>
+
+:::danger[`.env` holds real credentials]
+Never commit it. `envgo init` already added it to `.gitignore`, and it should stay
+there. Keep it out of the directory you serve with `--dir` too, so it can never be
+static-served.
+:::
+
+## Step 4 — Start the server
+
+The command is the same on every platform:
+
+```bash
+envgo run dev
+```
+
+`run dev` reads `HOST` and `PORT` from `.env` and opens your browser at
+`http://127.0.0.1:8080/`.
+
+Prefer not to auto-open the browser? Use `envgo run` instead.
+
+Watch the startup output — it tells you what loaded:
+
+```text
+[envGo] loaded 4 variables from .env
+[envGo] envGo running -> http://127.0.0.1:8080/
+```
+
+If the port is taken, envGo automatically tries the next one up (up to 20
+attempts), so check the printed address.
+
+## Step 5 — Check which keys are visible
+
+`envgo init` created a page containing:
+
+```html
+<h1>Hello from envGo!</h1>
+<div id="MY_SECRET"></div>
+<script src="/__env.js"></script>
+```
+
+Because `MY_SECRET` exists in `.env`, the div is replaced at runtime with:
+
+```text
+✓ MY_SECRET — Success (env exists, value hidden)
+```
+
+If the `id` does not match any key, you get a red banner instead:
+
+```text
+envGo — ID not match Key: 'MY_SECRETS' not found in .env.
+Did you mean 'MY_SECRET'? Check .env for 'MY_SECRET'
+```
+
+The value of `MY_SECRET` is never sent to the browser. A message like this
+confirms a key is **present**, nothing more.
+
+:::caution[Only give an `id` to elements that name a variable]
+The helper scans every element with an `id`. A button or output element with an
+`id` will be treated as a variable, have its text overwritten, and trigger a red
+banner. Use `class` or a selector instead, or reuse one of the skipped names:
+`out`, `chatBtn`, `btn`, `prompt`, `askBtn`.
+:::
+
+## Step 6 — Call an API with the key
+
+This is a complete, working example. Every name and endpoint below is
+illustrative — adapt it to your API.
+
+It takes two files that have to agree with each other. Here is the `.env` again
+so you can see the pairing — it is the same file you edited in Step 3:
+
+```env title=".env"
+MY_SECRET=some-real-value
+OPENAI_API_KEY=sk-your-real-key-here
+HOST=127.0.0.1
+PORT=8080
+```
+
+The two files must line up in three places:
+
+| In `index.html` | Must exist in `.env` |
+|-----------------|----------------------|
+| `<div id="MY_SECRET">` | `MY_SECRET` |
+| `<div id="OPENAI_API_KEY">` | `OPENAI_API_KEY` |
+| `Bearer {OPENAI_API_KEY}` | `OPENAI_API_KEY` |
+
+If an `id` has no matching key you get a red `ID not match Key` banner. If a
+`{…}` placeholder has no matching key the proxy call fails with
+`{"error":"missing env variable: OPENAI_API_KEY"}`.
+
+Also note that the button and output elements deliberately have **no `id`**, so
+the presence checker leaves them alone.
+
+```html title="index.html"
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>My App</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 3rem auto; }
+    button { padding: 10px 18px; font-size: 15px; cursor: pointer; }
+    pre { background: #0f172a; color: #7dd3fc; padding: 1rem; border-radius: 10px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Hello from envGo!</h1>
+
+  <!-- Variable presence check -->
+  <div id="MY_SECRET"></div>
+  <div id="OPENAI_API_KEY"></div>
+
+  <!-- No id: these are not variables -->
+  <button>Ask the API</button>
+  <pre>Click the button…</pre>
+
+  <script src="/__env.js"></script>
+  <script>
+    const button = document.querySelector("button");
+    const output = document.querySelector("pre");
+
+    button.addEventListener("click", async () => {
+      output.textContent = "Loading…";
+      try {
+        // 1. Fetch the per-process session token
+        const token = await fetch("/__envgo_token").then((r) => r.text());
+
+        // 2. Proxy the call; {OPENAI_API_KEY} is substituted server-side
+        const res = await fetch("/proxy", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-EnvGo-Token": token,
+          },
+          body: JSON.stringify({
+            target_url: "https://api.openai.com/v1/chat/completions",
+            method: "POST",
+            headers: { Authorization: "Bearer {OPENAI_API_KEY}" },
+            body: {
+              model: "gpt-4",
+              messages: [{ role: "user", content: "Say hello in one sentence." }],
+            },
+          }),
+        });
+
+        output.textContent = JSON.stringify(await res.json(), null, 2);
+      } catch (err) {
+        output.textContent = "Error: " + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
+```
+
+Two things about that code:
+
+- `"Bearer {OPENAI_API_KEY}"` is a **placeholder**. The literal text
+  `{OPENAI_API_KEY}` is what the browser sends; the Go process swaps it for the
+  real value before forwarding.
+- The host must be allowlisted. Restart the server with:
+
+```bash
+envgo run dev -a api.openai.com
+```
+
+Without `--allow`, envGo prints a warning on startup and refuses every proxy
+request.
+
+## Step 7 — Watch hot reload
+
+Leave the server running and change `.env` from another terminal:
+
+<Tabs>
+  <TabItem label="Windows">
+
+```powershell
+Add-Content -Path .env -Value "NEW_KEY=hello" -Encoding utf8
+```
+
+Reading it back with the same encoding matters more than you might expect —
+Windows PowerShell 5.1's default redirection writes UTF-16, which corrupts the
+file. If a key ever shows up garbled, rewrite `.env` from Notepad saved as UTF-8.
+PowerShell 7 handles UTF-8 by default.
+
+  </TabItem>
+  <TabItem label="macOS">
+
+```bash
+echo "NEW_KEY=hello" >> .env
+```
+
+  </TabItem>
+  <TabItem label="Linux">
+
+```bash
+echo "NEW_KEY=hello" >> .env
+```
+
+  </TabItem>
+</Tabs>
+
+Within about 1.5 seconds the server logs:
+
+```text
+[envGo] hot-reloaded 5 variables from .env
+```
+
+No restart needed.
+
+## Step 8 — Look at the dashboard
+
+```text
+http://127.0.0.1:8080/__envgo_dashboard
+```
+
+It lists the loaded variable **names**, recent proxy requests with status and
+duration, and any errors. Values are never shown. The same data endpoint is what
+`/__env.js` reads to learn the variable names.
+
+## Complete command sequence
+
+Copy-paste blocks for a fresh install, in one place. On Windows the commands are
+PowerShell; on macOS and Linux they are a POSIX shell.
+
+<Tabs>
+  <TabItem label="Windows">
+
+```powershell
+# 1. Install (adjust the binary name for ARM64)
+mkdir C:\envgo
+copy dist\envgo-windows-amd64.exe C:\envgo\envgo.exe
+[Environment]::SetEnvironmentVariable(
+  "Path",
+  [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\envgo",
+  "User"
+)
+# Open a NEW terminal here
+
+# 2. Verify
+envgo -v
+
+# 3. Create a project
+mkdir myapp
+cd myapp
+envgo init
+
+# 4. Edit .env with a real key
+notepad .env
+
+# 5. Run, allowing one API host
+envgo run dev -a api.openai.com
+```
+
+  </TabItem>
+  <TabItem label="macOS">
+
+```bash
+# 1. Install
+mkdir -p ~/.local/bin
+cp dist/envgo-darwin-arm64 ~/.local/bin/envgo      # or envgo-darwin-amd64
+chmod +x ~/.local/bin/envgo
+echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.zshrc
+source ~/.zshrc
+
+# 2. Verify
+envgo -v
+
+# 3. Create a project
+mkdir myapp && cd myapp
+envgo init
+
+# 4. Edit .env with a real key
+nano .env
+
+# 5. Run, allowing one API host
+envgo run dev -a api.openai.com
+```
+
+  </TabItem>
+  <TabItem label="Linux">
+
+```bash
+# 1. Install
+uname -m      # x86_64 → amd64, aarch64 → arm64
+sudo cp dist/envgo-linux-amd64 /usr/local/bin/envgo
+sudo chmod +x /usr/local/bin/envgo
+
+# 2. Verify
+envgo -v
+
+# 3. Create a project
+mkdir myapp && cd myapp
+envgo init
+
+# 4. Edit .env with a real key
+nano .env
+
+# 5. Run, allowing one API host
+envgo run dev -a api.openai.com
+```
+
+  </TabItem>
+</Tabs>
+
+## Common errors
+
+These are identical on every platform:
+
+| Response | Meaning | Fix |
+|----------|---------|-----|
+| `{"error":"missing env variable: OPENAI_API_KEY"}` | The key is not in `.env` | Add it, or fix the spelling |
+| `{"error":"unauthorized"}` | Token missing or stale | Fetch a fresh `/__envgo_token` |
+| `{"error":"target host not in allowlist: api.openai.com"}` | Host not allowed | Add it to `--allow` |
+| `{"error":"only HTTPS targets are allowed"}` | Target uses `http://` | Use `https://` |
+| Red banner reading `ID not match Key` | The element `id` does not match any key | Correct the `id` or the `.env` key |
+
+Platform-specific installation problems — `command not found`, wrong
+architecture, Gatekeeper, SmartScreen — are covered in
+[Installation](/getting-started/installation#troubleshooting).
+
+## Where to go next
+
+- Add more routes and turn on rate limiting →
+  [Public Mode](/modes/public-mode)
+- Understand every config field → [Configuration](/reference/configuration)
+- Deploy it → [Deploy to VPS](/guides/deploy-to-vps)
+- Learn the security layers → [Security Model](/core-concepts/security-model)

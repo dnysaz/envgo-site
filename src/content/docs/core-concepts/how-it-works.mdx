@@ -1,0 +1,254 @@
+---
+title: How It Works
+description: The components, the request lifecycle, and the concurrency model
+---
+
+envGo is one Go binary that does four jobs: serve static files, inject secrets
+server-side, proxy outbound API calls, and watch `.env` for changes.
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│                     envGo Binary                        │
+├─────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │
+│  │   Static    │  │   Proxy     │  │   Gateway   │      │
+│  │   Server    │  │   Engine    │  │   (Public)  │      │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘      │
+│         │                │                │             │
+│  ┌──────┴────────────────┴────────────────┴──────┐      │
+│  │        envStore  (hot-reload, RWMutex)        │      │
+│  └───────────────────────┬───────────────────────┘      │
+│                          │                              │
+│  ┌───────────────────────┴───────────────────────┐      │
+│  │                  .env File                    │      │
+│  └───────────────────────────────────────────────┘      │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Packages
+
+| Package | Responsibility |
+|---------|----------------|
+| `envconfig` | Parses the `.env` file into a key/value map, including `${VAR}` expansion |
+| `envstore` | Holds the parsed map behind an `RWMutex` and hot-reloads it by polling mtime |
+| `proxy` | Local-mode `/proxy` handler: validate target, inject placeholders, stream the response |
+| `gateway` | Public-mode `/api/<name>` handler: route lookup, rate limit, auth, injection, scrubbing |
+| `ratelimit` | Fixed-window limiter held in memory, keyed by route name plus client IP |
+| `history` | Fixed-size ring buffer of request metadata (no bodies, no secret values) |
+| `logger` | Leveled logger that redacts every known secret value from its output |
+| `token` | Generates the 256-bit per-process session token |
+| `server` | HTTP router, security guards, static serving, PHP execution, dashboard |
+
+## Router
+
+`server.Server.ServeHTTP` dispatches on the request path:
+
+| Path | Handler | Availability |
+|------|---------|--------------|
+| `/api/<name>` | Gateway | Only when `--config` is set |
+| `/proxy` | Proxy | Local mode only — `404` in public mode |
+| `/__envgo_token` | Session token | Local mode only — `404` in public mode |
+| `/__env.js` and `/env.js` | Generated JS helper | Always |
+| `/history` | JSON request history | Requires a valid token |
+| `/__envgo_dashboard` | Dashboard HTML | Gated by `ShowDashboard` |
+| `/__envgo_dashboard/data` | Dashboard JSON | Gated by `ShowDashboard` |
+| `*.php` | PHP executor | When a PHP interpreter is found |
+| anything else | Static file server | Always |
+
+`ShowDashboard` is `true` in local mode and `false` in public mode unless you
+pass `--dashboard`.
+
+### Static file rules
+
+The static handler refuses, with a `404`:
+
+- any path containing `..` or a backslash
+- any path segment starting with `.` (so dotfiles, including `.env`, are never served)
+- files named `envgo.routes.json`, `routes.json`, or the path given to `--config`
+- anything that resolves outside the web root
+
+Directories fall back to `index.html`, `index.php`, then `index.htm`.
+
+## Request lifecycle
+
+### 1. Page load
+
+```text
+Browser                    envGo
+   │  GET /                   │
+   │─────────────────────────>│ serve index.html from --dir
+   │<─────────────────────────│
+   │  GET /__env.js           │
+   │─────────────────────────>│ serve generated JS
+   │<─────────────────────────│
+```
+
+### 2. Variable discovery
+
+`/__env.js` runs in the browser and:
+
+1. selects every element with an `id`
+2. fetches `/__envgo_dashboard/data`
+3. reads the `vars` array — **names only**
+4. writes `window.EnvLoaded[name] = true` and marks the element with a success or
+   failure style
+5. prepends a red banner naming the closest match for anything that does not exist
+
+### 3. Local mode: a `/proxy` call
+
+```text
+Browser                     envGo                      Upstream
+   │  GET /__envgo_token        │                          │
+   │───────────────────────────>│                          │
+   │<───────────────────────────│ session token            │
+   │                            │                          │
+   │  POST /proxy               │                          │
+   │  X-EnvGo-Token: …          │                          │
+   │  {target_url, headers…}    │                          │
+   │───────────────────────────>│ 1. guard: Host check     │
+   │                            │ 2. guard: Origin check   │
+   │                            │ 3. guard: token compare  │
+   │                            │ 4. substitute {NAME}     │
+   │                            │ 5. check --allow         │
+   │                            │─────────────────────────>│
+   │                            │<─────────────────────────│
+   │<───────────────────────────│ streamed back            │
+```
+
+### 4. Public mode: an `/api/<name>` call
+
+```text
+Browser                     envGo                      Upstream
+   │  POST /api/chat            │                          │
+   │───────────────────────────>│ 1. route lookup          │
+   │                            │ 2. optional bearer auth  │
+   │                            │ 3. rate limit            │
+   │                            │ 4. substitute {NAME}     │
+   │                            │    (route vars only)     │
+   │                            │ 5. optional scrub        │
+   │                            │─────────────────────────>│
+   │                            │<─────────────────────────│
+   │<───────────────────────────│                          │
+```
+
+## Component details
+
+The structs below are **abridged for readability** — field names match the
+source, but comments and helper fields are omitted.
+
+### envStore
+
+```go
+type Store struct {
+	mu    sync.RWMutex
+	vars  map[string]string
+	path  string
+	mtime time.Time
+	size  int64
+	log   *logger.Logger
+}
+```
+
+`Get` and `Names` take a read lock, so the proxy can read concurrently while the
+watcher goroutine swaps the map out under a write lock. Reload is driven by
+polling: every 1.5 seconds envGo compares the file's size and mtime and re-parses
+only when they changed. No file-watcher library is used, which keeps the binary
+dependency-free.
+
+### proxy.Handler
+
+```go
+type Handler struct {
+	vars   VarSource
+	log    loggerI
+	hist   *history.History
+	client *http.Client
+	allow  []string
+}
+```
+
+`VarSource` is a one-method interface (`Get(name string) (string, bool)`), which
+is what lets tests inject a plain map.
+
+### gateway.Gateway
+
+```go
+type Gateway struct {
+	cfg     *Config
+	vars    proxy.VarSource
+	log     Logger
+	client  *http.Client
+	limiter *ratelimit.Limiter
+	hist    *history.History
+	routes  map[string]*compiled
+}
+```
+
+At startup the gateway compiles the config once: each route is lowercased into
+the `routes` map, its rate limit string is parsed, and its `vars` array is
+converted into a lookup map. Requests then only do a map lookup.
+
+### ratelimit.Limiter
+
+```go
+type Limiter struct {
+	mu      sync.Mutex
+	windows map[string]*window
+}
+
+type window struct {
+	count int
+	reset time.Time
+}
+```
+
+This is a **fixed-window** counter, not a token bucket. Each key (route name plus
+client IP) gets a window that resets wholesale after the period elapses, so a
+client can burst up to `limit` requests at the end of one window and again at the
+start of the next. Map growth is bounded by a garbage-collection sweep once the
+map exceeds 10,000 keys.
+
+### history.History
+
+```go
+type History struct {
+	mu      sync.Mutex
+	entries []Entry
+	max     int
+}
+```
+
+A ring buffer capped at 200 entries by default. `List` returns them
+newest-first. Entries hold time, method, host, status, duration, the **names** of
+variables used, and an error string — never bodies, header values, or secret
+values.
+
+## Concurrency model
+
+- `net/http` already serves each connection in its own goroutine; envGo does
+  **not** spawn an extra goroutine per request.
+- Shared state is protected with mutexes: `RWMutex` for the env store and
+  `Mutex` for history and the rate limiter.
+- The `.env` watcher runs in a single background goroutine started at boot.
+- The outbound HTTP client has a 60-second timeout and is reused across requests.
+
+The upshot: envGo is safe for concurrent use, and its memory footprint stays flat
+because nothing per-request is retained beyond the bounded history ring.
+
+## Performance characteristics
+
+| Property | Value |
+|----------|-------|
+| Startup | Milliseconds — no framework, no interpreter boot |
+| Hot-reload latency | Up to ~1.5 s (polling interval) |
+| Per-request overhead | A regex substitution plus map lookups |
+| Shared state | Bounded: 200 history entries, rate-limit windows garbage-collected |
+
+No benchmarks are published in the repository, so treat these as design
+characteristics rather than measured numbers.
+
+## Next steps
+
+- [Security Model](/core-concepts/security-model) — how the guards compose
+- [Environment Variables](/core-concepts/environment-variables) — the `.env` format
+- [Local Mode](/modes/local-mode) — `/proxy` reference

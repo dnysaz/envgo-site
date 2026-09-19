@@ -1,0 +1,213 @@
+---
+title: Installation
+description: Install envGo from the macOS ZIP or manually on any platform
+---
+
+envGo is a single executable with no runtime dependencies. Installing it means
+putting the binary on your `PATH`.
+
+Don't have the files yet? Grab them from [Download](/download). Otherwise pick
+the section for your platform below.
+
+## macOS — ZIP installer (easiest)
+
+The release archive contains the installer script and the binary:
+
+| Archive | For |
+|---------|-----|
+| `envGo-macOS-AppleSilicon.zip` | M-series Macs |
+| `envGo-macOS-Intel.zip` | Intel Macs |
+
+Not sure which you have? Run:
+
+```bash
+uname -m
+```
+
+`arm64` means Apple Silicon; `x86_64` means Intel.
+
+### Steps
+
+1. Extract the ZIP. You get a folder containing `Install_envGo.command`, a
+   `dist/` folder with the binary, and `README.md`.
+2. Double-click `Install_envGo.command`. It copies the binary to
+   `~/.local/bin/envgo`, marks it executable, and prints the help output.
+3. If `~/.local/bin` is not on your `PATH`, the script tells you which line to add
+   to `~/.zshrc`.
+
+:::caution[macOS may block the launcher]
+Because the archive is not notarised by Apple, Gatekeeper may refuse to open
+`Install_envGo.command`:
+
+> "Install_envGo.command" cannot be opened because it is from an unidentified
+> developer.
+
+To allow it once: **right-click the file → Open → Open**. Or use
+System Settings → Privacy & Security → **Open Anyway**.
+
+If the archive arrived over the internet, macOS also attaches a quarantine
+attribute. Remove it for the whole extracted folder:
+
+```bash
+xattr -dr com.apple.quarantine envGo-macOS-AppleSilicon
+```
+
+Extracting with the `unzip` command in Terminal instead of Finder avoids the
+quarantine attribute entirely.
+:::
+
+## macOS — manual install
+
+```bash
+# Extract the archive
+unzip envGo-macOS-AppleSilicon.zip
+
+# Install the binary and make it executable
+mkdir -p ~/.local/bin
+cp envGo-macOS-AppleSilicon/dist/envgo-darwin-arm64 ~/.local/bin/envgo
+chmod +x ~/.local/bin/envgo
+```
+
+For an Intel Mac, use the Intel archive and
+`dist/envgo-darwin-amd64`.
+
+Add to `PATH` if it is not there already:
+
+```bash
+echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+## Linux
+
+```bash
+# AMD64 (most servers)
+sudo cp dist/envgo-linux-amd64 /usr/local/bin/envgo
+sudo chmod +x /usr/local/bin/envgo
+
+# ARM64 (Raspberry Pi, Graviton, …)
+sudo cp dist/envgo-linux-arm64 /usr/local/bin/envgo
+sudo chmod +x /usr/local/bin/envgo
+```
+
+Or install into your home directory without sudo:
+
+```bash
+mkdir -p ~/.local/bin
+cp dist/envgo-linux-amd64 ~/.local/bin/envgo
+chmod +x ~/.local/bin/envgo
+```
+
+Check the architecture first if you are unsure:
+
+```bash
+uname -m      # x86_64 → amd64, aarch64 → arm64
+```
+
+## Windows
+
+```powershell
+# Copy either
+#   dist\envgo-windows-amd64.exe
+#   dist\envgo-windows-arm64.exe
+
+mkdir C:\envgo
+copy dist\envgo-windows-amd64.exe C:\envgo\envgo.exe
+```
+
+Then add `C:\envgo` to your `PATH` via **System Properties → Environment
+Variables**, and open a new terminal so the change takes effect.
+
+## Building from source
+
+Requires Go 1.21 or newer.
+
+```bash
+git clone <repository>
+cd <repository>
+make build          # → ./envgo
+```
+
+The `Makefile` uses `CGO_ENABLED=0` and `-trimpath -ldflags="-s -w"`, so the
+result is a static, stripped binary. To build every platform into `dist/`:
+
+```bash
+make release
+```
+
+## Verify
+
+```bash
+envgo -v      # print the version
+envgo -h      # show the flag reference
+```
+
+A successful install prints something like:
+
+```text
+ ____
+   ___ _ ____   __/ ___| ___
+  / _ \ '_ \ \ / / |  _ / _ \
+ |  __/ | | \ V /| |_| | (_) |
+  \___|_| |_|\_/  \____|\___/
+  envGo v20260919 — Zero-dependency micro-runtime for HTML/Vanilla JS
+  Secure .env injection — secrets never reach the browser
+
+envGo 20260919
+```
+
+## Create your first project
+
+```bash
+mkdir myapp && cd myapp
+envgo init
+envgo run dev
+```
+
+`envgo init` writes `.env`, `.env.example`, `index.html`, `.gitignore`, and
+`README.md` into the current directory. See
+[Quick Start](/getting-started/quick-start) for the walkthrough.
+
+:::caution[`envgo init` overwrites existing files]
+It only checks whether the *directory* exists (and only when you pass `-name`).
+Running it in a folder that already contains `index.html`, `README.md`,
+`.gitignore`, or `.env` will overwrite them. Use `envgo init -name myapp` to
+create a fresh subdirectory instead.
+:::
+
+## Uninstall
+
+envGo is one file — remove it and the install is gone.
+
+```bash
+# macOS / Linux, user install
+rm ~/.local/bin/envgo
+
+# Linux, system install
+sudo rm /usr/local/bin/envgo
+
+# Windows
+del C:\envgo\envgo.exe
+```
+
+If an older release was installed under the previous name, remove that too:
+
+```bash
+rm -f ~/.local/bin/envbridge
+```
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `envgo: command not found` | The install directory is not on `PATH` — add it and open a new shell |
+| `bad CPU type in executable` | Wrong architecture. Check `uname -m` and install the matching binary |
+| `Permission denied` | `chmod +x` the binary, or install to a user-writable directory |
+| Gatekeeper blocks the binary | Right-click → Open, or `xattr -dr com.apple.quarantine <folder>` |
+| `cannot execute binary file` on Linux | Wrong architecture, or the file was transferred as text — re-copy it |
+
+## Next steps
+
+- [Quick Start](/getting-started/quick-start) — a working site in five minutes
+- [CLI Commands](/reference/cli-commands) — every command and flag
+- [Local Mode](/modes/local-mode) — how `/proxy` works

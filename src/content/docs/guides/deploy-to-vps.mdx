@@ -1,0 +1,361 @@
+---
+title: Deploy to VPS
+description: Step-by-step production deployment on a Linux server
+---
+
+This guide deploys envGo to a Linux VPS (DigitalOcean, Vultr, Linode, Hetzner,
+AWS EC2, and so on). It covers both local mode and public mode, with a systemd
+service and a reverse proxy for TLS.
+
+## Prerequisites
+
+- A Linux VPS (Ubuntu/Debian assumed below)
+- SSH access
+- A domain name, if you want HTTPS with a trusted certificate
+- The envGo Linux binary: `dist/envgo-linux-amd64` or `dist/envgo-linux-arm64`
+
+## Step 1 — Upload
+
+```bash
+# The binary
+scp dist/envgo-linux-amd64 user@your-vps:/tmp/envgo
+
+# Your project (HTML, .env, routes config)
+scp -r /path/to/your/project user@your-vps:/var/www/myapp
+```
+
+:::danger[Never copy `.env` through an untrusted path]
+`.env` holds live credentials. Prefer creating it directly on the server with
+`nano`, or transfer over SSH only. Keep it out of any git repository and out of
+the directory served to the public if you can.
+:::
+
+Or clone a repository and create `.env` on the server:
+
+```bash
+ssh user@your-vps
+sudo git clone https://github.com/yourusername/yourproject.git /var/www/myapp
+```
+
+## Step 2 — Install the binary
+
+```bash
+# Detect the architecture first
+uname -m      # x86_64 → amd64, aarch64 → arm64
+
+sudo cp /tmp/envgo /usr/local/bin/envgo
+sudo chmod +x /usr/local/bin/envgo
+
+# Verify
+envgo -v
+envgo -h
+```
+
+## Step 3 — Configure the environment
+
+```bash
+cd /var/www/myapp
+sudo nano .env
+```
+
+```env
+MY_SECRET=your-secret-value
+OPENAI_API_KEY=sk-your-real-key
+```
+
+If you plan to use `envgo run` on the server, you can also set:
+
+```env
+HOST=127.0.0.1
+PORT=8080
+```
+
+:::note[`HOST`/`PORT` only apply to `envgo run`]
+These keys are read **only** by `envgo run` / `envgo run dev`, and only when the
+matching flag is at its default. With an explicit `--host`/`--port` on the command
+line (as in the systemd unit below) they are ignored. This is why editing
+`PORT` in `.env` will not change the port of a systemd-managed service.
+:::
+
+Lock down permissions — the file should not be world-readable:
+
+```bash
+sudo chmod 600 /var/www/myapp/.env
+```
+
+## Step 4 — Choose a mode
+
+### Option A — Local mode with `--allow`
+
+The browser still chooses target URLs, but only allowlisted hosts are reachable.
+This is the simplest setup and is fine for private tools.
+
+```bash
+sudo -u www-data envgo \
+  --dir /var/www/myapp \
+  --env /var/www/myapp/.env \
+  --allow api.openai.com \
+  --host 127.0.0.1 \
+  --port 8080
+```
+
+### Option B — Public mode with a routes config (recommended)
+
+The browser chooses a route name only; target URLs come from the config.
+
+```bash
+sudo -u www-data envgo \
+  --config /var/www/myapp/envgo.routes.json \
+  --env /var/www/myapp/.env \
+  --dir /var/www/myapp \
+  --host 127.0.0.1 \
+  --port 8080
+```
+
+Create the routes config before you start. See
+[Configuration](/reference/configuration) for every field.
+
+```json title="envgo.routes.json"
+{
+  "trust_proxy": true,
+  "default_rate_limit": "30/min",
+  "scrub_response": true,
+  "routes": [
+    {
+      "name": "chat",
+      "method": "POST",
+      "target": "https://api.openai.com/v1/chat/completions",
+      "vars": ["OPENAI_API_KEY"],
+      "inject": {
+        "headers": { "Authorization": "Bearer {OPENAI_API_KEY}" }
+      },
+      "rate_limit": "20/min"
+    }
+  ]
+}
+```
+
+:::danger[Rate limiting is opt-in]
+Omitting both `default_rate_limit` and `rate_limit` leaves a route **unlimited**.
+If you copy the config above, keep at least one of them.
+:::
+
+## Step 5 — Run as a systemd service
+
+```bash
+sudo nano /etc/systemd/system/envgo.service
+```
+
+Public mode:
+
+```ini
+[Unit]
+Description=envGo Server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/myapp
+ExecStart=/usr/local/bin/envgo --config /var/www/myapp/envgo.routes.json --env /var/www/myapp/.env --dir /var/www/myapp --host 127.0.0.1 --port 8080
+Restart=always
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+For local mode, replace `ExecStart` with:
+
+```ini
+ExecStart=/usr/local/bin/envgo --dir /var/www/myapp --env /var/www/myapp/.env --allow api.openai.com --host 127.0.0.1 --port 8080
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable envgo
+sudo systemctl start envgo
+sudo systemctl status envgo
+```
+
+On shutdown, systemd sends `SIGTERM`, which envGo handles with a graceful drain
+of up to 3 seconds.
+
+## Step 6 — Reverse proxy for TLS
+
+Terminating TLS at Caddy or nginx keeps envGo simple and gives you automatic
+certificates.
+
+### Caddy
+
+```bash
+sudo apt install -y caddy
+sudo nano /etc/caddy/Caddyfile
+```
+
+```text
+yourdomain.com {
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
+```bash
+sudo systemctl enable caddy
+sudo systemctl start caddy
+```
+
+Caddy obtains and renews a Let's Encrypt certificate automatically and redirects
+HTTP to HTTPS.
+
+### nginx
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80;
+    server_name yourdomain.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+Setting `X-Forwarded-For` is what makes `trust_proxy: true` meaningful.
+
+### `trust_proxy` — read this before enabling it
+
+```json
+{ "trust_proxy": true, "default_rate_limit": "30/min", "routes": [] }
+```
+
+- **Behind a proxy you control:** set it to `true`. Rate limiting then keys on the
+  real client IP from the first `X-Forwarded-For` entry.
+- **Directly exposed:** leave it `false`. If it is `true` on a directly reachable
+  instance, clients can forge `X-Forwarded-For` and give themselves a fresh rate
+  limit bucket per request.
+
+## Step 7 — Firewall
+
+Only expose the ports the reverse proxy needs:
+
+```bash
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+sudo ufw status
+```
+
+Port 8080 stays bound to `127.0.0.1` and must not be opened.
+
+## Verification
+
+```bash
+# Static page
+curl -I https://yourdomain.com/
+
+# A route with the bearer auth header, if the route uses auth
+curl -X POST https://yourdomain.com/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4","messages":[{"role":"user","content":"Hello"}]}'
+
+# Logs
+sudo journalctl -u envgo -f
+sudo journalctl -u caddy -f
+```
+
+A `200` with an upstream payload means the whole chain works. A `400` with
+`variable not available for this route` means a `vars` entry does not match a key
+in `.env`.
+
+## Troubleshooting
+
+### `Address already in use`
+
+envGo automatically tries up to 20 consecutive ports, so it may already be
+running on the next port up — check the startup log. If something else holds the
+port:
+
+```bash
+sudo lsof -i :8080
+sudo systemctl stop envgo
+```
+
+To change the port of a systemd service, edit the **`--port` value in
+`ExecStart`**, not `PORT` in `.env` — `HOST`/`PORT` from `.env` only apply to
+`envgo run`.
+
+```bash
+sudo systemctl edit envgo     # or edit the unit file directly
+sudo systemctl daemon-reload
+sudo systemctl restart envgo
+```
+
+### `Permission denied` reading `.env`
+
+```bash
+sudo chown www-data:www-data /var/www/myapp/.env
+sudo chmod 600 /var/www/myapp/.env
+```
+
+### `Connection refused` from the reverse proxy
+
+```bash
+sudo systemctl status envgo
+sudo journalctl -u envgo -n 50
+sudo ss -tlnp | grep 8080     # confirm envGo is bound where you expect
+```
+
+### Certificate warnings
+
+If you enabled `--tls`, the warning is expected — envGo uses a self-signed
+certificate. Use Caddy or nginx for a trusted certificate instead. See
+[TLS / HTTPS](/guides/tls-https).
+
+### Routes return `401` / `403` unexpectedly
+
+- `401` — the route uses `auth`, or the session token is missing in local mode
+- `403` — in local mode, the target host is not in `--allow`
+- `404` — the route name does not match, or you are not actually in public mode
+  (check for the `PUBLIC MODE` line in the startup log)
+
+## Security checklist
+
+- [ ] `.env` has mode `600` and is owned by the service user
+- [ ] `.env` is in `.gitignore`
+- [ ] envGo is bound to `127.0.0.1`, not `0.0.0.0`
+- [ ] Port 8080 is closed at the firewall
+- [ ] Reverse proxy terminates TLS
+- [ ] `default_rate_limit` or per-route `rate_limit` is set
+- [ ] `trust_proxy: true` only because a proxy is actually in front
+- [ ] `--dashboard` is **not** enabled in production
+- [ ] `scrub_response` enabled if upstreams might echo credentials
+- [ ] No `.php` files unless a PHP interpreter is installed
+
+## Next steps
+
+- [TLS / HTTPS](/guides/tls-https) — certificate options compared
+- [Docker Deployment](/guides/docker-deployment) — container alternative
+- [Threat Model](/reference/threat-model) — known limitations

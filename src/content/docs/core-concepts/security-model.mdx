@@ -1,0 +1,229 @@
+---
+title: Security Model
+description: The layers envGo uses to keep secrets out of the browser
+---
+
+envGo starts from one rule: **a secret must never be needed by the browser**.
+Everything else follows from that. This page explains the layers that enforce it.
+
+:::tip[Looking for the full attack list?]
+[Threat Model](/reference/threat-model) is the canonical table of threats,
+mitigations, and known limitations. This page focuses on how the layers are
+built and composed.
+:::
+
+## Design principles
+
+1. **Secrets stay server-side** — the browser receives variable *names*, never values
+2. **Deny by default** — no allowlist means no proxy; unmatched routes are `404`
+3. **Defence in depth** — independent guards, each of which alone blocks an attack class
+4. **Fail closed** — an unknown placeholder is a hard error, not a silent pass-through
+
+## Layer 1 — Secret isolation
+
+```text
+┌─────────────────────────────────────────┐
+│              Browser                    │
+│  <div id="MY_SECRET"></div>             │
+│  <script src="/__env.js"></script>      │
+│                                         │
+│  Receives: variable NAMES only          │
+└─────────────────────────────────────────┘
+                    │  HTTP
+                    ▼
+┌─────────────────────────────────────────┐
+│              envGo Server               │
+│  .env → in-memory map (RWMutex)         │
+│  {NAME} substituted here, then forwarded│
+│  Values never serialised to the browser │
+└─────────────────────────────────────────┘
+```
+
+The dashboard data endpoint returns `env_path`, `env_count`, `vars` (names), and
+request metadata. It never returns a value. That is the entire payload available
+to client-side code.
+
+## Layer 2 — Host validation
+
+```go
+// enabled addresses come from the bound address, not from the request
+func allowedHosts(addr string) []string {
+	_, port, _ := net.SplitHostPort(addr)
+	return []string{
+		addr,
+		net.JoinHostPort("localhost", port),
+		net.JoinHostPort(host, port),
+	}
+}
+```
+
+Every request whose `Host` header is not in that set is rejected with `403`. This
+defeats DNS rebinding: an attacker's domain can resolve to `127.0.0.1`, but the
+`Host` header still carries the attacker's name and is refused.
+
+## Layer 3 — Origin validation
+
+```go
+func (s *Server) originAllowed(origin string) bool {
+	if origin == "" {
+		return true // same-origin requests often omit Origin
+	}
+	for _, o := range s.origins {
+		if o == origin {
+			return true
+		}
+	}
+	return false
+}
+```
+
+Only `http://localhost:<port>` and `http://<bound-addr>` are accepted. Any other
+`Origin` — including a page the user happens to have open on another site — is
+rejected with `403`.
+
+## Layer 4 — Session token
+
+```go
+tok := r.Header.Get("X-EnvGo-Token")
+return subtle.ConstantTimeCompare([]byte(tok), []byte(empty)) != 1 &&
+	subtle.ConstantTimeCompare([]byte(tok), []byte(s.opts.Token)) == 1
+```
+
+A 256-bit token from `crypto/rand`, regenerated on every process start and served
+only by `/__envgo_token`. Comparison is constant-time and an empty token is
+explicitly rejected, so there is no "empty matches empty" edge case.
+
+The three guards are applied together in `authorized()`: Host, then Origin, then
+token. All three must pass for `/proxy`.
+
+:::note[The token is not user authentication]
+It prevents a random cross-origin page from driving your proxy. It does not
+identify users, has no expiry, and any page served from your own origin can fetch
+it. Do not treat local mode as multi-user security.
+:::
+
+## Layer 5 — Outbound allowlist
+
+```go
+func hostAllowed(host string, allow []string) bool {
+	if len(allow) == 0 {
+		return false // DENY BY DEFAULT
+	}
+	// exact match, or "*", or a subdomain of an allowlisted host
+}
+```
+
+With no `--allow`, the proxy is disabled outright and envGo says so at startup.
+Matching is exact or subdomain-based, so `--allow openai.com` also covers
+`api.openai.com`. Only `https://` targets are accepted.
+
+## Layer 6 — Rate limiting
+
+```go
+type Limiter struct {
+	mu      sync.Mutex
+	windows map[string]*window
+}
+
+type window struct {
+	count int
+	reset time.Time
+}
+```
+
+A **fixed-window** counter keyed by route name plus client IP. Worth being precise
+about, because the properties differ from a token bucket:
+
+- A client can issue `limit` requests at the end of one window and `limit` again
+  at the start of the next — a burst of up to `2 × limit` across the boundary.
+- State is per process. Multiple instances each enforce their own limit.
+- Without `trust_proxy: true` behind a proxy, all clients share one bucket,
+  because they all appear to come from the proxy's IP.
+- An empty rate limit means **unlimited**. There is no default.
+
+Exceeding the limit returns `429` with `{"error":"rate limit exceeded"}` and
+`Retry-After: 60`.
+
+## Layer 7 — Response and log redaction
+
+There is no separate `scrubResponse` helper. Redaction is centralised in the
+logger, which is taught every loaded secret value at load time (excluding `HOST`
+and `PORT`):
+
+```go
+func (l *Logger) Redact(s string) string {
+	// replace every known secret with [REDACTED], longest value first
+	return s
+}
+```
+
+Three things flow through it:
+
+1. every log line (`Info`, `Warn`, `Error`, `Debug`)
+2. response bodies when `scrub_response` is enabled
+3. the request history shown on the dashboard
+
+Replacing longest-first makes overlapping secrets deterministic — if one secret
+is a substring of another, the longer one is redacted first.
+
+:::danger[Streaming responses bypass redaction]
+If the upstream response is detected as a stream (`text/event-stream`, or a
+`Content-Type` containing `stream`), bytes are piped straight through and
+redaction is skipped. This keeps streaming working but means an upstream that
+echoes a key inside a stream will send that key to the browser.
+:::
+
+## Layer 8 — Config and dotfile protection
+
+The static handler refuses to serve:
+
+- any path segment beginning with `.` — so `.env` is unreachable even if it sits
+  in the web root
+- `envgo.routes.json`, `routes.json`, and the exact path passed to `--config`
+- paths containing `..` or `\`, or resolving outside the web root
+
+## Layer 9 — PHP containment
+
+- a 30-second timeout per request, enforced with `exec.CommandContext`
+- `.env` variables are passed through the process environment
+- source is scanned for undefined keys (typo detection) and for
+  `echo`/`print`/`var_dump`/`print_r` around a secret access (security warning)
+- only the variables present in `.env` are injected
+
+:::caution[PHP has a fall-through you must know about]
+If `php` is not on `PATH`, or the script exits non-zero or times out, envGo falls
+back to serving the `.php` file as a static download — exposing its source. Only
+place `.php` files in a deployment where a PHP interpreter is definitely
+available. See [PHP Support](/guides/php-support).
+:::
+
+## Layer 10 — TLS
+
+```bash
+envgo --tls
+```
+
+- RSA 2048-bit self-signed certificate generated at startup
+- valid for 1 year
+- covers `localhost` and `127.0.0.1`
+- `MinVersion` pinned to TLS 1.2
+
+The certificate is generated fresh on each start and never written to disk. For
+anything public, terminate TLS at Caddy or nginx instead.
+
+## What envGo does not do
+
+| Not provided | Why it matters |
+|--------------|----------------|
+| User authentication or sessions | The token is per-process, not per-user |
+| Encryption of `.env` at rest | Protect the file with OS permissions |
+| Tamper protection on upstream responses | envGo forwards what upstream returns |
+| Redaction of streaming responses | See the caveat above |
+| Multi-instance rate limiting | Counters are in-process |
+| Request/response body logging | Deliberately excluded from history |
+
+## Next steps
+
+- [Threat Model](/reference/threat-model) — the full threat/mitigation table
+- [Configuration](/reference/configuration) — `trust_proxy`, `scrub_response`, rate limits
+- [TLS / HTTPS](/guides/tls-https) — production TLS setup

@@ -1,0 +1,193 @@
+---
+title: CLI Commands
+description: Complete reference for every envgo command, flag, and default
+---
+
+This page documents the full `envgo` command-line interface. Every flag, its short
+form, its default value, and its exact behaviour is listed below.
+
+## Command syntax
+
+```bash
+envgo [subcommand] [flags] [arguments]
+```
+
+:::caution[Subcommand must come first]
+The subcommand (`run`, `init`, `deploy`) must be the **first** argument.
+
+- `envgo run dev --debug` ✅ works
+- `envgo --debug run dev` ❌ does **not** start dev mode
+
+envGo only inspects `os.Args[1]` to detect a subcommand. In the second form the
+`--debug` flag is parsed, but `run dev` is treated as ignored positional
+arguments — so you get a plain server with debug logging, **not** dev mode.
+:::
+
+## Starting the server
+
+envGo has two modes, selected by whether you pass `--config`:
+
+| Invocation | Mode | What it does |
+|------------|------|--------------|
+| `envgo` | Local | Static file server + `/proxy` with session token |
+| `envgo run` | Local | Same, but reads `HOST`/`PORT` from `.env` |
+| `envgo run dev` / `envgo dev` | Local (dev) | Same as `run`, and always opens a browser |
+| `envgo --config routes.json` | Public | Fixed routes at `/api/<name>`, no token handshake |
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `envgo` | Start the server with default flags |
+| `envgo run` | Start the server and read `HOST`/`PORT` from `.env` |
+| `envgo run dev` | Start in dev mode (implies `--browser`) |
+| `envgo dev` | Alias for `envgo run dev` |
+| `envgo init` | Create a starter project in the current directory |
+| `envgo init -name myapp` | Create the starter project in a new `myapp/` directory |
+| `envgo deploy` | Generate `Caddyfile`, `nginx.conf`, `Dockerfile` |
+| `envgo -v` | Print version and exit |
+| `envgo -h` | Show help and exit |
+
+## Flags
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--port` | `-p` | int | `8080` | Port to listen on |
+| `--host` | | string | `127.0.0.1` | Interface to bind. Keep `127.0.0.1` for local-only access |
+| `--dir` | `-d` | string | `.` | Web root directory to serve |
+| `--env` | `-e` | string | `.env` | Path to the `.env` file |
+| `--allow` | `-a` | string | *(empty)* | Comma-separated outbound host allowlist |
+| `--config` | `-c` | string | *(empty)* | Path to routes JSON. Setting it enables **public mode** |
+| `--dashboard` | `-D` | bool | `false` | Enable the metadata dashboard in public mode |
+| `--tls` | | bool | `false` | Serve HTTPS with an auto-generated self-signed certificate |
+| `--browser` | `-b` | bool | `false` | Open the browser automatically after start |
+| `--debug` | | bool | `false` | Verbose logging |
+| `--name` | | string | *(empty)* | Project name for `envgo init` (empty = current directory) |
+| `-o` | | string | *(empty)* | Output directory for `envgo deploy` (default: `./deploy`) |
+| `--version` | `-v` | bool | `false` | Print version and exit |
+| `--help` | `-h` | bool | `false` | Show help and exit |
+
+## Behaviour details
+
+### Port fallback
+
+If the requested port is already in use, envGo tries the next 19 ports
+(`8080` → `8081` → … → `8099`) before giving up. The address actually bound is
+printed at startup, so check the log if you do not get the port you asked for.
+
+### `HOST` and `PORT` from `.env`
+
+These are only read when you use `envgo run` or `envgo run dev`, **and** only if
+you did not override them on the command line:
+
+- `HOST` is used only when `--host` is still at its default `127.0.0.1`
+- `PORT` is used only when `--port` is still at its default `8080`
+
+Both uppercase (`HOST`) and lowercase (`host`) keys are accepted. A leading colon
+in `PORT` is stripped, so `PORT=:3000` works.
+
+With plain `envgo --config … --port 8080`, `.env` is **not** consulted for
+`HOST`/`PORT`. This trips people up when editing `.env` to change the port of a
+systemd service — pass `--port` explicitly there instead.
+
+### Security default: no `--allow` means no proxy
+
+If `--allow` is empty **and** you are not in public mode, envGo prints a warning
+and disables the proxy entirely:
+
+```text
+[envGo] WARN no --allow set: proxy is DISABLED for security. Use -a/--allow host1,host2
+```
+
+This is deliberate SSRF protection. Host matching accepts exact hosts and
+subdomains, so `--allow openai.com` also permits `api.openai.com`.
+
+### `.env` vs `.env.example` check
+
+At startup envGo compares key names in the file given by `--env` against
+`.env.example` in the same directory and prints a warning per mismatch:
+
+- a key in `.env` but not in `.env.example` → `warning`
+- a key in `.env.example` but not in `.env` → `hint`
+
+Values are never compared.
+
+### Public mode disables the local endpoints
+
+When `--config` is set, `/proxy`, `/__envgo_token`, the legacy `/__env/*` path
+and the dashboard are all disabled (the last one unless you also pass
+`--dashboard`). Only `/api/<name>` plus static files are served.
+
+### Shutdown
+
+`SIGINT` (Ctrl-C) and `SIGTERM` trigger a graceful shutdown with a 3-second
+drain timeout, so in-flight responses get a chance to finish. This is what
+`systemctl stop envgo` sends.
+
+## Examples
+
+All examples below use placeholder values — replace them with your own.
+
+```bash
+# Start a local server with an explicit directory, env file, and allowlist
+envgo --dir . --env .env --allow httpbin.org
+
+# Dev mode: reads HOST/PORT from .env and opens the browser
+envgo run dev
+
+# Dev mode with verbose logging (flag AFTER the subcommand)
+envgo run dev --debug
+
+# Different port, restricted allowlist, auto-open browser
+envgo -p 3000 -d . -e .env -a api.openai.com -b
+
+# Public mode: fixed routes, no token handshake
+envgo --config envgo.routes.json --env .env --dir . --host 127.0.0.1 --port 8080
+
+# Public mode with the dashboard enabled (for debugging only)
+envgo --config envgo.routes.json --env .env --dashboard
+
+# HTTPS with a self-signed certificate
+envgo --tls --dir . --env .env --allow api.openai.com
+
+# Create a starter project
+envgo init
+envgo init -name myapp
+
+# Generate deployment configs
+envgo deploy -o ./deploy
+```
+
+`envgo deploy -o ./deploy` writes three files: `Caddyfile`, `nginx.conf`, and
+`Dockerfile`. See [Docker Deployment](/guides/docker-deployment) for how to use
+them.
+
+## What `envgo init` creates
+
+Running `envgo init` writes five files into the target directory:
+
+| File | Contents |
+|------|----------|
+| `.env` | `MY_SECRET=change-me`, `HOST=127.0.0.1`, `PORT=8080` (mode `0600`) |
+| `.env.example` | The same placeholder content |
+| `index.html` | Minimal page with `<div id="MY_SECRET"></div>` and `/__env.js` |
+| `.gitignore` | Ignores `.env`, `*.key`, `*.secret` |
+| `README.md` | Generated quick-start notes |
+
+:::caution[`init` overwrites files without asking]
+`envgo init` only checks whether the **directory** exists (and only in
+`-name` mode). Running it in a directory that already has `index.html`,
+`README.md`, `.gitignore`, or `.env` **overwrites those files**. Back up first,
+or use `envgo init -name <newdir>`.
+:::
+
+Also note that `.env` and `.env.example` are written with *identical* content, so
+the generated `.env` holds a placeholder, not a real secret. Edit `.env` before
+running.
+
+## Next steps
+
+- [Configuration](/reference/configuration) — routes JSON reference for public mode
+- [Threat Model](/reference/threat-model) — what each guard protects against
+- [Local Mode](/modes/local-mode) — development workflow
+- [Public Mode](/modes/public-mode) — production gateway

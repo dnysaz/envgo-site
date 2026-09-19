@@ -1,0 +1,351 @@
+---
+title: Local Mode
+description: Development workflow with a session token and the /proxy endpoint
+---
+
+Local mode is what you get when you run envGo **without** `--config`. It serves
+your static files and exposes a token-guarded `/proxy` endpoint that can reach any
+host you allowlist. It is designed for development and single-user use.
+
+## When to use it
+
+- Local development and testing API integrations
+- Personal projects on your own machine
+- Prototyping where you do not want to define routes up front
+
+For anything reachable by other people, use
+[Public Mode](/modes/public-mode) instead — the browser should not be choosing
+target URLs in production.
+
+## Flow
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│                    Local Mode Flow                      │
+├─────────────────────────────────────────────────────────┤
+│  1. Browser → GET /__envgo_token  → session token       │
+│  2. Browser → POST /proxy  (X-EnvGo-Token header)       │
+│       { target_url, headers: { Authorization: "{KEY}" }}│
+│  3. envGo   → substitutes {KEY}, checks --allow,        │
+│               forwards upstream                         │
+│  4. envGo   → streams the response back to the browser  │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Quick start
+
+### 1. Start the server
+
+```bash
+# Reads HOST/PORT from .env and opens the browser
+envgo run dev
+
+# Explicit flags
+envgo --port 3000 --dir . --env .env --allow api.openai.com -b
+```
+
+### 2. Get the session token
+
+```javascript
+const token = await fetch("/__envgo_token").then((r) => r.text());
+```
+
+The token is unique per process start. Restarting envGo invalidates it, so always
+fetch a fresh one rather than caching it in a file.
+
+### 3. Call through the proxy
+
+```javascript
+const res = await fetch("/proxy", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-EnvGo-Token": token,
+  },
+  body: JSON.stringify({
+    target_url: "https://api.openai.com/v1/chat/completions",
+    method: "POST",
+    headers: { Authorization: "Bearer {OPENAI_API_KEY}" },
+    body: {
+      model: "gpt-4",
+      messages: [{ role: "user", content: "Hello!" }],
+    },
+  }),
+});
+
+const data = await res.json();
+```
+
+## Complete example
+
+This is a **working example** you can copy — the variable names, model, and
+endpoint are illustrative. Replace `OPENAI_API_KEY` and the model with your own.
+
+Note that the button and output elements deliberately have **no `id`**. The
+`/__env.js` helper treats any element with an `id` as a variable name, so giving
+them ids would make the helper overwrite their text and show a red "ID not match
+Key" banner. See
+[Environment Variables](/core-concepts/environment-variables) for details.
+
+```html title="index.html"
+<!DOCTYPE html>
+<html>
+<head>
+  <title>envGo Local Mode Demo</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 50px auto; }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    pre { background: #1a1a1a; color: #0f0; padding: 20px; border-radius: 8px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>envGo Local Mode</h1>
+
+  <!-- These WILL be checked against .env -->
+  <div id="MY_SECRET"></div>
+  <div id="OPENAI_API_KEY"></div>
+
+  <h2>API Call</h2>
+  <button>Call API</button>
+  <pre>Click the button to call the API…</pre>
+
+  <script src="/__env.js"></script>
+  <script>
+    // No id attribute on these elements, so /__env.js ignores them
+    const button = document.querySelector("button");
+    const output = document.querySelector("pre");
+
+    button.addEventListener("click", async () => {
+      output.textContent = "Loading…";
+      try {
+        const token = await fetch("/__envgo_token").then((r) => r.text());
+        const res = await fetch("/proxy", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-EnvGo-Token": token,
+          },
+          body: JSON.stringify({
+            target_url: "https://api.openai.com/v1/chat/completions",
+            method: "POST",
+            headers: { Authorization: "Bearer {OPENAI_API_KEY}" },
+            body: {
+              model: "gpt-4",
+              messages: [{ role: "user", content: "Say hello in one word" }],
+            },
+          }),
+        });
+        output.textContent = JSON.stringify(await res.json(), null, 2);
+      } catch (err) {
+        output.textContent = "Error: " + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
+```
+
+```env title=".env"
+MY_SECRET=my-secret-value
+OPENAI_API_KEY=sk-your-real-key-here
+```
+
+```bash
+envgo run dev -a api.openai.com
+# → http://127.0.0.1:8080/
+```
+
+## Security in local mode
+
+### Session token
+
+Generated with `crypto/rand`, 256 bits, once per process. Required on every
+`/proxy` call and compared in constant time.
+
+### Host allowlist
+
+```bash
+envgo --allow api.openai.com,httpbin.org
+
+# Without --allow the proxy is REFUSED entirely
+envgo   # proxy disabled, warning printed at startup
+```
+
+### Host header validation
+
+The `Host` header must match the bound address, `localhost`, or the bound host.
+This blocks DNS-rebinding attacks where an attacker domain resolves to
+`127.0.0.1`.
+
+### Origin validation
+
+Only same-origin requests are accepted (an absent `Origin` header is also
+allowed, as same-origin requests commonly omit it). This blocks a malicious page
+in another tab from driving your proxy.
+
+## API reference
+
+### `GET /__envgo_token`
+
+Returns the session token as plain text with `Cache-Control: no-store`.
+
+```text
+3f9a1c…  (64 hex characters)
+```
+
+Returns `403` if the `Host` or `Origin` header is not recognised.
+
+### `POST /proxy`
+
+```json
+{
+  "target_url": "https://api.example.com/v1/endpoint",
+  "method": "POST",
+  "headers": {
+    "Authorization": "Bearer {API_KEY}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "model": "gpt-4",
+    "messages": []
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `target_url` | string | Yes | HTTPS URL. `{VAR}` placeholders are allowed here |
+| `method` | string | No | HTTP method. Defaults to `POST` |
+| `headers` | object | No | Headers to send. Values support `{VAR}` |
+| `body` | object or string | No | JSON body. Supports `{VAR}` inside the JSON |
+
+Substitution happens in `target_url`, every header value, and every value inside
+`body`. Any referenced variable that does not exist makes the whole request fail
+with `400` — nothing is silently dropped.
+
+### `GET /history`
+
+Returns the recent request metadata as JSON. Requires a valid token (same guard
+as `/proxy`), so it is not reachable from a page you do not control.
+
+```json
+[
+  {
+    "time": "2026-01-01T12:00:00Z",
+    "method": "POST",
+    "host": "api.openai.com",
+    "status": 200,
+    "ms": 412,
+    "variables": ["OPENAI_API_KEY"]
+  }
+]
+```
+
+Entries contain metadata only: time, method, host, status, duration, the **names**
+of variables used, and an error string. Bodies, header values, and secret values
+are never recorded.
+
+### Status codes
+
+| Code | Meaning |
+|------|---------|
+| `400` | Malformed request, or a referenced env variable is missing |
+| `401` | Missing, wrong, or empty session token |
+| `403` | `Host`/`Origin` rejected, or target host not in the allowlist |
+| `405` | Method other than `POST` on `/proxy` |
+| `502` | The upstream request failed |
+
+Note there is **no `429`** in local mode: rate limiting exists only in the public
+gateway.
+
+## Placeholder syntax
+
+Placeholders are `{NAME}` and can appear anywhere a string is accepted:
+
+```json
+{
+  "target_url": "https://api.example.com/v1/chat?key={API_KEY}",
+  "headers": {
+    "Authorization": "Bearer {API_KEY}",
+    "X-Project": "{PROJECT_ID}"
+  },
+  "body": {
+    "model": "{MODEL_NAME}",
+    "prompt": "Hello"
+  }
+}
+```
+
+Only names matching `[A-Za-z_][A-Za-z0-9_]*` are treated as placeholders, so
+ordinary JSON such as `{"nested": true}` passes through untouched.
+
+## Hot reload
+
+```bash
+# Terminal 1
+envgo run dev
+
+# Terminal 2
+echo "NEW_API_KEY=value" >> .env
+```
+
+```text
+[envGo] hot-reloaded 3 variables from .env
+```
+
+Applied within roughly 1.5 seconds. No restart needed.
+
+## Debugging
+
+```bash
+# Correct: flags come AFTER the subcommand
+envgo run dev --debug
+```
+
+:::caution[Flag order matters]
+`envgo --debug run dev` does **not** start dev mode. envGo only looks at the first
+argument to detect a subcommand, so `--debug` is parsed and `run dev` is ignored
+as positional arguments. Always put flags after the subcommand.
+:::
+
+The dashboard is enabled by default in local mode:
+
+```text
+http://127.0.0.1:8080/__envgo_dashboard
+```
+
+It lists variable names and recent requests. It is also what `/__env.js` reads to
+learn the variable names.
+
+In the browser console you can inspect what was detected:
+
+```javascript
+console.log(window.EnvLoaded);
+// { MY_SECRET: true, OPENAI_API_KEY: true }
+```
+
+Booleans only — the values themselves never reach the browser.
+
+## Common issues
+
+| Message | Cause | Fix |
+|---------|-------|-----|
+| `{"error":"missing env variable: OPENAI_API_KEY"}` | Placeholder not in `.env` | Add the key to `.env` |
+| `{"error":"unauthorized"}` | Token missing, stale, or wrong | Fetch a fresh token from `/__envgo_token` |
+| `{"error":"target host not in allowlist: api.openai.com"}` | Host not in `--allow` | Add it to `--allow` |
+| `{"error":"only HTTPS targets are allowed"}` | Target uses `http://` | Use `https://` |
+| `{"error":"variable not available for this route"}` | Public-mode route lacks the var in `vars` | See [Configuration](/reference/configuration) |
+
+## Best practices
+
+1. **Set `--allow`** — never rely on the proxy being reachable only locally
+2. **Use `-b`** to open the browser automatically while developing
+3. **Put flags after the subcommand** (`envgo run dev --debug`)
+4. **Fetch a fresh token** instead of persisting it
+5. **Do not expose local mode** to a network — use public mode behind a proxy
+
+## Next steps
+
+- [Public Mode](/modes/public-mode) — the production gateway
+- [Configuration](/reference/configuration) — routes JSON reference
+- [Deploy to VPS](/guides/deploy-to-vps) — shipping to a server

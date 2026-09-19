@@ -1,0 +1,115 @@
+---
+title: Threat Model
+description: What envGo protects against, and what it explicitly does not
+---
+
+This page is the canonical threat model. It lists what envGo defends against,
+the exact mechanism used, and — just as importantly — the limits of each defence.
+
+## Threat model
+
+| Threat | Mitigation | Where it lives |
+|--------|------------|----------------|
+| Inspect Element / DevTools | Secrets never enter the browser. JavaScript only ever holds placeholder strings | `server.serveEnvJS`, `proxy.inject` |
+| Network tab sniffing | The browser talks to your own origin; the key is injected and the request is forwarded server-side | `proxy.Handler.ServeHTTP` |
+| Cross-tab / XSS request forgery | Session token **plus** `Host` **plus** `Origin` validation on `/proxy` | `server.authorized` |
+| DNS rebinding | `Host` header must match the bound address, `localhost`, or the bound host | `server.hostAllowed` |
+| SSRF via arbitrary targets | Proxy is disabled when `--allow` is empty; otherwise only allowlisted hosts | `proxy.validateTarget` |
+| Abuse of fixed routes | Per-route `vars` allow-set, per-route rate limit, optional bearer auth | `gateway.inject`, `ratelimit.Limiter` |
+| Upstream secret leak | `scrub_response` redacts known secret values from responses | `logger.Redact` |
+| LAN / network exposure | Defaults to binding `127.0.0.1` only | `main.go` |
+| TLS downgrade | `MinVersion` is TLS 1.2 when using `--tls` | `main.go` |
+| PHP code execution | 30-second execution timeout per request | `server.servePHP` |
+| Accidental secret logging | Every log line passes through a redacting logger | `logger.Logger.Redact` |
+| Secrets committed to git | `envgo init` writes a `.gitignore` covering `.env` | `main.go` `doInit` |
+| Config file disclosure over HTTP | `envgo.routes.json`, `routes.json` are always blocked from static serving, and dotfiles are never served | `server.serveStatic` |
+
+## Defences in detail
+
+### Browser isolation
+
+The browser receives variable **names**, never values. `/__env.js` fetches
+`/__envgo_dashboard/data`, reads the `vars` array, and compares it against element
+IDs on the page. Only booleans are stored (`window.EnvLoaded[name] = true`).
+
+### Three-guard handshake on `/proxy`
+
+Local mode rejects a proxy call unless all three checks pass:
+
+1. `Host` header matches a known address (anti DNS-rebinding)
+2. `Origin` header is absent or same-origin (anti cross-tab)
+3. `X-EnvGo-Token` equals the per-process session token, compared with
+   `subtle.ConstantTimeCompare`
+
+The token is 256 bits from `crypto/rand`, generated once per process start and
+served only by `/__envgo_token`. It has **no expiry** — it is valid for the life
+of the process, so restarting envGo rotates it.
+
+### Deny by default
+
+- No `--allow` → the proxy refuses every target
+- No `default_rate_limit` and no `rate_limit` → unlimited (this is the one place
+  envGo does **not** deny by default; you must opt in to limiting)
+- No matching route → `404`
+- Placeholder not in the route's `vars` → hard `400`, never a silent drop
+
+### Redaction
+
+The logger is taught every secret value loaded from `.env` (excluding `HOST` and
+`PORT`). Every log line, the dashboard's request history, and scrubbed response
+bodies have occurrences replaced with `[REDACTED]`. Longest values are replaced
+first so overlapping secrets are handled deterministically.
+
+## Known limitations
+
+Be aware of these before trusting envGo with a high-value secret:
+
+- **Streaming responses are not scrubbed.** SSE/streaming passthrough skips
+  redaction entirely to avoid buffering. See
+  [Configuration](/reference/configuration#response-scrubbing).
+- **The dashboard exposes variable names.** Variable *names* and request
+  metadata are readable by anyone who can reach the dashboard. It is enabled by
+  default in local mode and opt-in in public mode. Do not enable it on a
+  publicly reachable instance.
+- **`/__env.js` depends on the dashboard data endpoint.** Because it reads
+  `/__envgo_dashboard/data` to learn the variable names, the helper only works
+  where that endpoint is enabled.
+- **Rate limiting is per-process, per-IP.** Multiple instances multiply the
+  effective limit, and behind a proxy without `trust_proxy: true` every request
+  shares a single bucket.
+- **A failed or missing PHP interpreter falls through to serving the source.**
+  If `php` is not installed, or a script exits non-zero or times out, envGo
+  serves the `.php` file as a static download. Add PHP files only when a PHP
+  interpreter is present. See [PHP Support](/guides/php-support).
+- **The session token is not a user authentication system.** It stops a random
+  cross-origin page from using your proxy. It does not authenticate users, and
+  any page served from your own origin can obtain it.
+- **Static files are served as-is.** Anything in your web root — except the
+  config files and dotfiles — is public, including a `.env` that happens to sit
+  in the served directory. Do not serve the directory that holds your `.env`.
+- **`--tls` uses a self-signed certificate.** Browsers will warn. Use a reverse
+  proxy with real certificates for anything public.
+
+## Security checklist for production
+
+- [ ] `.env` is in `.gitignore` and is not inside the served web root
+- [ ] `--allow` is set (local mode) or every route uses an explicit `vars` allow-set
+- [ ] `default_rate_limit` or per-route `rate_limit` is set — empty means unlimited
+- [ ] Running behind Caddy/nginx for TLS termination
+- [ ] envGo bound to `127.0.0.1`, not `0.0.0.0`
+- [ ] `trust_proxy: true` set **only** when actually behind a proxy you control
+- [ ] Dashboard disabled (no `--dashboard`) in public mode
+- [ ] `scrub_response` enabled if upstreams might echo secrets
+- [ ] `.env.example` contains placeholder values only
+- [ ] Secrets rotated if they were ever committed or logged
+
+## Reporting a vulnerability
+
+Please report suspected vulnerabilities privately rather than in a public issue,
+and include reproduction steps plus a description of the impact.
+
+## Next steps
+
+- [Security Model](/core-concepts/security-model) — how the layers are composed
+- [Configuration](/reference/configuration) — the settings referenced above
+- [PHP Support](/guides/php-support) — details of the PHP caveat

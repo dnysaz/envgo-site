@@ -1,0 +1,221 @@
+---
+title: Introduction
+description: What envGo is, what it can do, and when to use it
+---
+
+**envGo** is a zero-dependency, single-binary runtime written in Go that lets
+plain HTML and vanilla JavaScript use `.env` secrets safely.
+
+It serves your static site and proxies outbound API calls, replacing `{NAME}`
+placeholders with real values inside the Go process. The values never reach the
+browser — not in the DOM, not in the Network tab, not in memory.
+
+## What envGo can do
+
+| Capability | How |
+|------------|-----|
+| Serve your static site | Built-in HTTP file server over `--dir` |
+| Keep secrets out of the browser | `{NAME}` placeholders substituted server-side |
+| Report which keys exist, without values | `/__env.js` + element IDs |
+| Proxy API calls with a session token | `/proxy` in local mode |
+| Expose fixed, named API routes | `/api/<name>` in public mode |
+| Hot-reload `.env` without restarting | mtime polling, ~1.5 s |
+| Throttle abusive clients | Per-route, per-IP rate limiting |
+| Require a client token on a route | Optional bearer auth per route |
+| Redact secrets from responses and logs | `scrub_response` plus a redacting logger |
+| Execute PHP server-side with `.env` injected | Any `.php` file, when PHP is installed |
+| Detect env-var typos | Red banner comparing IDs and keys |
+| Warn about exposed secrets in PHP | Red banner on `echo getenv(...)` |
+| Serve HTTPS without external tooling | `--tls` with an auto-generated certificate |
+| Generate deployment configs | `envgo deploy` writes Caddy/nginx/Docker files |
+| Stop serving config files | Always blocks routes JSON and dotfiles |
+
+For the full flag list see [CLI Commands](/reference/cli-commands); for the routes
+JSON see [Configuration](/reference/configuration).
+
+## What envGo is not
+
+- Not a general backend framework — it solves one problem: keeping secrets out of
+  the browser
+- Not a database or an ORM
+- Not a CDN
+- Not a user authentication system — the session token is per process, not per user
+- Not a replacement for TLS in production — use a reverse proxy
+
+## The problem it solves
+
+Embedding an API key in front-end JavaScript exposes it to anyone who opens
+DevTools:
+
+```javascript
+// BAD: the key ships to every visitor
+const API_KEY = "sk-live-abc123";
+await fetch("https://api.openai.com/v1/chat/completions", {
+  headers: { Authorization: `Bearer ${API_KEY}` },
+});
+```
+
+The usual fix is a backend — Express, Django, and so on — which brings a runtime,
+a dependency tree, and deployment overhead you may not want for a static page.
+
+envGo is the narrow alternative: a single binary that serves the page and holds
+the key.
+
+```html
+<div id="MY_SECRET"></div>
+<script src="/__env.js"></script>
+```
+
+```javascript
+await fetch("/proxy", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "X-EnvGo-Token": token },
+  body: JSON.stringify({
+    target_url: "https://api.openai.com/v1/chat/completions",
+    headers: { Authorization: "Bearer {OPENAI_API_KEY}" }, // placeholder
+  }),
+});
+```
+
+## How it fits together
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│                      Browser                            │
+│  <div id="MY_SECRET"></div>                             │
+│  <script src="/__env.js"></script>                      │
+│  fetch("/proxy", { headers: {Authorization: "{KEY}"} }) │
+│                                                         │
+│  Holds only placeholder strings and boolean flags       │
+└─────────────────────────────────────────────────────────┘
+                          │ HTTP
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│                 envGo Server (Go binary)                │
+│  .env → in-memory map                                   │
+│  1. Validate Host, Origin, session token                │
+│  2. Substitute {KEY} → real value                       │
+│  3. Check the outbound allowlist                        │
+│  4. Forward upstream, stream the response back          │
+└─────────────────────────────────────────────────────────┘
+                          │ HTTPS (with the real key)
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│        External API (OpenAI, Gemini, your own…)          │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Two modes
+
+| | Local mode | Public mode |
+|---|-----------|-------------|
+| Enabled by | default | `--config <file>` |
+| Browser calls | `/proxy` | `/api/<name>` |
+| Target URL chosen by | The browser (allowlist-restricted) | The config file |
+| Auth | Session token | Optional per-route bearer |
+| Rate limiting | None | Per-route, per-IP |
+| Best for | Development | Production |
+
+Read [Local Mode](/modes/local-mode) and [Public Mode](/modes/public-mode) for the
+details.
+
+## Why Go
+
+- **Single static binary.** No Node runtime, no `node_modules`, no install step —
+  copy the file and run it.
+- **Cross-platform from one codebase.** macOS, Linux, and Windows, amd64 and arm64.
+- **Standard library only.** HTTP server, JSON, crypto, regex. There are no
+  third-party dependencies in `go.mod`.
+- **Predictable concurrency.** `net/http` handles requests per connection, with
+  mutexes guarding the shared state that matters.
+
+## Repository layout
+
+```text
+main.go                  CLI entry point: flags, subcommands, TLS, bootstrap
+internal/
+  envconfig/             .env parser (quotes, comments, ${VAR} expansion)
+  envstore/              hot-reloading in-memory variable store
+  proxy/                 local-mode /proxy engine
+  gateway/               public-mode /api/<name> gateway and config parser
+  server/                router, security guards, static serving, PHP, dashboard
+  ratelimit/             fixed-window limiter
+  history/               bounded ring buffer of request metadata
+  logger/                leveled, secret-redacting logger
+  token/                 session token generation
+scripts/install.sh       interactive installer
+Makefile                 build, test, release targets
+dist/                    cross-compiled binaries produced by `make release`
+```
+
+Two notes for contributors:
+
+- The Go module path is `envbridge` for historical reasons, so imports read
+  `envbridge/internal/...`. The product name is envGo.
+- This documentation site is maintained **separately** from the Go source tree,
+  in its own Astro project. A change to the code does not automatically update
+  these pages.
+
+## How secrets stay safe
+
+**1. Browser isolation.** The browser receives variable *names*. `/__env.js`
+compares element IDs against that list and stores only booleans.
+
+**2. Server-side substitution.** The regex substitution runs in the Go process:
+
+```go
+out, used, missing, ok := inject(s, vars)
+```
+
+If `ok` is false, the request fails — a placeholder without a value is never
+forwarded as-is.
+
+**3. A network boundary.** Only the Go process holds real values. The browser's
+request contains placeholders; the upstream request contains the secret.
+
+Each layer is documented in [Security Model](/core-concepts/security-model), and
+the attack-by-attack view is in [Threat Model](/reference/threat-model).
+
+## Building from source
+
+```bash
+git clone <repository>
+cd <repository>
+
+# Host build
+make build            # → ./envgo
+
+# Run the test suite
+make test
+
+# Cross-compile every target into dist/
+make release
+```
+
+Artifact sizes, as of the current build:
+
+| Target | Size |
+|--------|------|
+| `envgo-linux-amd64` | ~2.5 MB (UPX-compressed) |
+| `envgo-linux-arm64` | ~2.1 MB (UPX-compressed) |
+| `envgo-windows-amd64.exe` | ~2.5 MB (UPX-compressed) |
+| `envgo-windows-arm64.exe` | ~3.0 MB (UPX-compressed) |
+| `envgo-darwin-amd64` | ~8.1 MB (not compressed) |
+| `envgo-darwin-arm64` | ~7.5 MB (not compressed) |
+
+macOS binaries are deliberately not UPX-compressed: compressing a Mach-O binary
+breaks code signing on Apple Silicon.
+
+## Use cases
+
+- **Personal projects** — API integrations without standing up a backend
+- **Prototyping** — iterate without a server framework
+- **Static sites** — add API functionality to a plain HTML/JS project
+- **Existing PHP apps** — keep the pages, move the keys server-side
+- **Learning** — a small, readable example of server-side secret injection
+
+## Next steps
+
+- [Installation](/getting-started/installation) — install with the ZIP installer or manually
+- [Quick Start](/getting-started/quick-start) — a working setup in five minutes
+- [How It Works](/core-concepts/how-it-works) — the request lifecycle

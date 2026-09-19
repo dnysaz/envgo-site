@@ -1,0 +1,327 @@
+---
+title: Environment Variables
+description: The .env file format, how envGo loads it, and how secrets reach your code
+---
+
+envGo reads a single `.env` file at startup and keeps it in memory, hot-reloading
+when the file changes. This page documents the file format, exactly how variables
+are resolved, and how your HTML, JavaScript, and PHP can use them.
+
+## How the file is loaded
+
+There is **one** env source: the file given by `--env` (default `.env`).
+
+```bash
+envgo --env .env              # default
+envgo --env /etc/myapp/.env   # explicit path
+envgo -e ../shared/.env       # short form
+```
+
+If the file does not exist, envGo still starts — it logs a warning and runs with
+zero variables, then picks the file up as soon as it appears. It does **not**
+merge multiple files, and it does **not** layer `.env` on top of the process
+environment.
+
+:::note[`HOST` and `PORT` are special]
+They are only consulted by `envgo run` / `envgo run dev`, and only when the
+corresponding flag is still at its default. See
+[CLI Commands](/reference/cli-commands#host-and-port-from-env).
+:::
+
+## File format
+
+```env
+# Comments start with #
+KEY=value
+
+# Blank lines are ignored
+
+# Optional `export` prefix is accepted
+export ANOTHER_KEY=another value with spaces
+
+# Double or single quotes are stripped
+QUOTED="a value with # not a comment"
+SINGLE='another quoted value'
+
+# Empty values are valid
+EMPTY_VAR=
+
+# Cross-platform line endings work (\r\n)
+```
+
+### Parsing rules, precisely
+
+| Rule | Behaviour |
+|------|-----------|
+| Empty lines | Ignored |
+| `#` at start of a line | Comment, ignored |
+| `export KEY=` | The `export ` prefix is stripped |
+| Missing `=` | **Load fails** with `expected KEY=VALUE` and the line number |
+| Empty key (`=value`) | **Load fails** with `empty key` |
+| Whitespace | Trimmed from both key and value |
+| Quotes | A matching pair of `"` or `'` around the whole value is removed |
+| `${VAR}` expansion | Resolved against earlier keys in the same file first, then against the OS environment |
+| Value containing `#` | Not treated as a comment — only whole-line comments count |
+| Internal spaces | Preserved (`API_KEY=sk-123 456` keeps the spaces) |
+
+Because expansion resolves earlier keys first, later keys can build on earlier
+ones:
+
+```env
+HOST=api.example.com
+BASE_URL=https://${HOST}/v1
+# BASE_URL becomes https://api.example.com/v1
+```
+
+If a name is not defined earlier in the file, the OS environment is consulted. So
+`TOKEN=${CI_TOKEN}` picks up an exported `CI_TOKEN` — but only inside the value
+of that one variable. There is no general precedence chain: `.env` values do not
+inherit from or override the process environment.
+
+### Key naming rules
+
+Two different rule sets apply, and they are not the same thing:
+
+**`.env` keys are not validated.** Any non-empty key is accepted:
+
+```env
+123KEY=works
+MY-KEY=works
+_dotworks=works
+```
+
+These all load. envGo does not reject them. However, a key containing a character
+outside `[A-Za-z0-9_]` cannot be referenced from a `{NAME}` placeholder, because
+the placeholder pattern is stricter:
+
+**Placeholder names must match `[A-Za-z_][A-Za-z0-9_]*`.**
+
+| Key in `.env` | Usable as `{…}` placeholder? |
+|---------------|------------------------------|
+| `MY_KEY` | Yes |
+| `_private` | Yes |
+| `KEY2` | Yes |
+| `123KEY` | No — starts with a digit |
+| `MY-KEY` | No — contains a hyphen |
+| `MY KEY` | No — contains a space |
+
+Keys are case-sensitive: `MY_KEY` and `my_key` are two different variables.
+
+## `.env` vs `.env.example`
+
+`.env` holds real values and must never be committed. `.env.example` documents
+which keys are required and is safe to commit — use obvious placeholders:
+
+```env title=".env.example"
+OPENAI_API_KEY=your-key-here
+DATABASE_URL=postgres://user:pass@localhost:5432/db
+SECRET_KEY=change-me
+```
+
+```env title=".env"
+OPENAI_API_KEY=sk-live-abc123
+DATABASE_URL=postgres://app:realpassword@db.internal:5432/app
+SECRET_KEY=9f3c1d7a...
+```
+
+At startup envGo compares only the **key names** of the two files and warns about
+mismatches in either direction — it never compares values.
+
+## Using variables in HTML
+
+```html
+<!DOCTYPE html>
+<html>
+  <head><title>My App</title></head>
+  <body>
+    <!-- envGo reports whether these keys exist -->
+    <div id="MY_SECRET"></div>
+    <div id="OPENAI_API_KEY"></div>
+
+    <script src="/__env.js"></script>
+  </body>
+</html>
+```
+
+`/__env.js` scans every element with an `id`, fetches the list of variable names,
+and for each element either shows `✓ NAME — Success (value hidden)` or
+`✗ NAME — ID not match Key in .env`. When something does not match it prepends a
+red banner suggesting the closest name (Levenshtein distance, threshold 3).
+
+:::caution[Only elements whose `id` matches a variable should get an `id`]
+The helper walks **all** `[id]` elements. A button or output element with an `id`
+is treated as a variable name, its text content is overwritten, and a red banner
+appears. Avoid `id` on non-variable elements, or name them exactly `out`,
+`chatBtn`, `btn`, `prompt`, or `askBtn`, which are skipped by the helper.
+:::
+
+## Using variables in JavaScript
+
+Only booleans ever reach JavaScript:
+
+```javascript
+// Set to true when the id matched a variable, otherwise absent
+console.log(window.EnvLoaded.MY_SECRET); // true
+console.log(window.EnvLoaded.NOPE);      // undefined
+```
+
+The value itself is never available — not in memory, not on the network, not in
+`localStorage`. To actually *use* a secret you must go through `/proxy` (local
+mode) or `/api/<name>` (public mode).
+
+## Using variables in PHP
+
+When PHP is installed, envGo executes `.php` files server-side with every `.env`
+variable added to the process environment.
+
+```php
+<?php
+// Any of these three access styles work
+$secret = getenv("MY_SECRET");
+$secret = $_ENV["MY_SECRET"];
+$secret = $_SERVER["MY_SECRET"];
+
+if ($secret) {
+    echo "<p>Secret configured ✓</p>";
+} else {
+    echo "<p>Error: Secret not configured</p>";
+}
+?>
+```
+
+Below is an **example** — the names are illustrative, not built into envGo:
+
+```php
+<?php
+// Example: validate without revealing
+$apiKey = getenv("OPENAI_API_KEY");
+if ($apiKey) {
+    // Use the key server-side. Never echo its value.
+}
+?>
+```
+
+### Patterns that trigger a warning
+
+envGo scans the PHP source. Echoing a secret triggers a red security banner:
+
+```php
+<?php
+echo getenv("MY_SECRET");   // DANGEROUS
+print getenv("API_KEY");    // DANGEROUS
+var_dump(getenv("SECRET")); // DANGEROUS
+?>
+```
+
+### Typos are detected
+
+Referencing a key that is not in `.env` triggers a red banner naming the closest
+match:
+
+```php
+<?php $secret = getenv("MY_SECRETS"); // typo ?>
+```
+
+```text
+envGo — PHP env typo: undefined variable MY_SECRETS not found in .env.
+Did you mean 'MY_SECRET'?
+```
+
+See [PHP Support](/guides/php-support) for the installed-interpreter lookup order
+and the caveat about what happens when PHP is unavailable.
+
+## Using variables through the proxy
+
+### Local mode
+
+```javascript
+// 1. Get the session token
+const token = await fetch("/__envgo_token").then((r) => r.text());
+
+// 2. Send the request with placeholders
+const res = await fetch("/proxy", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-EnvGo-Token": token,
+  },
+  body: JSON.stringify({
+    target_url: "https://api.openai.com/v1/chat/completions",
+    method: "POST",
+    headers: { Authorization: "Bearer {OPENAI_API_KEY}" },
+    body: { model: "gpt-4", messages: [{ role: "user", content: "Hello" }] },
+  }),
+});
+```
+
+The host must be in `--allow`, and every referenced variable must exist in
+`.env`.
+
+### Public mode
+
+```javascript
+// No token needed — the target is fixed in the routes config
+const res = await fetch("/api/chat", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ model: "gpt-4", messages: [{ role: "user", content: "Hello" }] }),
+});
+```
+
+The route decides which variables may be injected. See
+[Configuration](/reference/configuration) for the `vars` allow-set.
+
+## Hot reload
+
+Edit `.env` while envGo runs and the change is picked up within roughly 1.5
+seconds — there is no restart and no file watcher dependency:
+
+```bash
+# Terminal 1
+envgo run dev
+
+# Terminal 2
+echo "NEW_API_KEY=value" >> .env
+```
+
+```text
+[envGo] hot-reloaded 6 variables from .env
+```
+
+Reload is triggered by comparing the file's size and modification time. Writing a
+file with identical size and mtime will not trigger a reload. A reload replaces
+the entire variable map, so removing a key really does remove it.
+
+## Debugging
+
+```bash
+# Verbose logging (flag after the subcommand)
+envgo run dev --debug
+```
+
+```text
+[envGo] loaded 5 variables from .env
+```
+
+The dashboard at `/__envgo_dashboard` lists variable **names** and recent request
+metadata — never values:
+
+```bash
+envgo --dashboard --dir . --env .env --allow api.openai.com
+```
+
+## Best practices
+
+1. **Never commit `.env`** — keep it in `.gitignore`
+2. **Keep `.env` out of the served directory** so it can never be static-served
+3. **Document required keys** in `.env.example` with placeholder values
+4. **Use descriptive names** — `OPENAI_API_KEY`, not `KEY1`
+5. **Rotate secrets** periodically, and immediately if one is ever echoed or
+   committed
+6. **Give each route the minimum** — list only the variables it needs in `vars`
+
+## Next steps
+
+- [How It Works](/core-concepts/how-it-works) — the request lifecycle
+- [Local Mode](/modes/local-mode) — `/proxy` in depth
+- [Public Mode](/modes/public-mode) — the `/api/<name>` gateway

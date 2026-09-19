@@ -1,0 +1,269 @@
+---
+title: TLS / HTTPS
+description: Self-signed certificates for development and real certificates for production
+---
+
+envGo can serve HTTPS itself with an auto-generated certificate, or run plain HTTP
+behind a reverse proxy that terminates TLS. For anything public, prefer the
+reverse proxy.
+
+## Development: `--tls`
+
+```bash
+envgo --tls
+```
+
+At startup envGo generates a self-signed certificate and serves HTTPS:
+
+```text
+[envGo] envGo HTTPS running -> https://127.0.0.1:8080/
+```
+
+### Certificate properties
+
+| Property | Value |
+|----------|-------|
+| Key type | RSA 2048-bit |
+| Validity | 1 year from start |
+| Subject alternative names | `localhost`, `127.0.0.1` |
+| Storage | Generated fresh in memory at each start, never written to disk |
+| Minimum protocol | TLS 1.2 |
+
+Because the certificate is regenerated on every start, its fingerprint changes
+each time. Anything that pinned the old certificate will need updating.
+
+### Trusting the warning once
+
+Your browser will warn about the self-signed certificate:
+
+1. Click **Advanced**
+2. Click **Proceed to 127.0.0.1 (unsafe)**
+
+This is expected in development.
+
+### Full command
+
+```bash
+envgo --tls --dir . --env .env --allow api.openai.com
+```
+
+## Why not `--tls` in production
+
+- Self-signed certificates produce browser warnings for every visitor
+- There is no automatic renewal — a fresh certificate is minted per process start
+- You would have to distribute and trust your certificate out of band
+
+Instead, terminate TLS at a reverse proxy and let envGo speak plain HTTP on
+`127.0.0.1`.
+
+## Production option 1 — Caddy
+
+```bash
+# Debian / Ubuntu
+sudo apt install -y caddy
+```
+
+```text title="/etc/caddy/Caddyfile"
+yourdomain.com {
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
+```bash
+sudo systemctl enable caddy
+sudo systemctl start caddy
+```
+
+Caddy obtains a Let's Encrypt certificate on first request, renews it
+automatically, and redirects HTTP to HTTPS.
+
+:::note[Caddy does not add security headers by default]
+A plain `reverse_proxy` block adds **no** `Strict-Transport-Security`,
+`X-Content-Type-Options`, `X-Frame-Options`, or `X-XSS-Protection` headers. If you
+want them, add them explicitly:
+
+```text
+yourdomain.com {
+    reverse_proxy 127.0.0.1:8080
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}
+```
+:::
+
+### Which headers envGo sets itself
+
+envGo adds `X-Frame-Options: DENY`, a restrictive `Content-Security-Policy`, and
+`Cache-Control: no-store` **on the dashboard routes only** — `/__envgo_dashboard`
+and its data endpoint. Your own pages and API responses are forwarded as they
+are, so any site-wide headers are your responsibility (or Caddy's).
+
+## Production option 2 — nginx
+
+```bash
+sudo apt install -y nginx
+sudo nano /etc/nginx/sites-available/envgo
+```
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80;
+    server_name yourdomain.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/envgo /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+## Production option 3 — certbot standalone
+
+If you would rather manage certificates yourself:
+
+```bash
+sudo apt install -y certbot
+sudo certbot certonly --standalone -d yourdomain.com
+```
+
+```text
+/etc/letsencrypt/live/yourdomain.com/fullchain.pem
+/etc/letsencrypt/live/yourdomain.com/privkey.pem
+```
+
+Point your proxy config at those paths. Note that `--standalone` briefly needs
+port 80 free, so stop whatever holds it during issuance.
+
+## Setting `trust_proxy`
+
+When a reverse proxy sits in front of envGo, enable it in the routes config so
+rate limiting can tell clients apart:
+
+```json
+{
+  "trust_proxy": true,
+  "default_rate_limit": "30/min",
+  "scrub_response": true,
+  "routes": []
+}
+```
+
+`trust_proxy: true` makes envGo read the client IP from the first entry of
+`X-Forwarded-For` instead of the TCP peer address. Without it, every request
+behind a proxy looks like it comes from the proxy, so all clients share one
+rate-limit bucket.
+
+:::danger[Only enable it behind a proxy you control]
+On a directly reachable instance, `trust_proxy: true` lets any client forge
+`X-Forwarded-For` and reset its own rate-limit bucket per request. Ensure your
+proxy overwrites the header (`proxy_set_header X-Forwarded-For` in nginx, which
+Caddy does by default) rather than appending to a client-supplied value.
+:::
+
+## Security headers, if you want them
+
+For nginx:
+
+```nginx
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "DENY" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+```
+
+`X-XSS-Protection` is obsolete in modern browsers and is omitted deliberately —
+a restrictive `Content-Security-Policy` is the effective control instead.
+
+## Firewall
+
+```bash
+# UFW (Debian / Ubuntu)
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+
+# firewalld (Fedora / RHEL)
+sudo firewall-cmd --permanent --add-service=ssh
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --reload
+```
+
+Port 8080 must stay closed — envGo binds `127.0.0.1` and is reachable only through
+the proxy.
+
+## Common issues
+
+### Certificate expired
+
+With Caddy this should not happen — renewal is automatic. For manual setups:
+
+```bash
+sudo certbot renew
+sudo systemctl restart nginx
+```
+
+### `SSL handshake failed`
+
+Check the certificate paths and that the proxy process can read them:
+
+```bash
+sudo ls -la /etc/letsencrypt/live/yourdomain.com/
+```
+
+### Mixed content warnings
+
+Every asset must load over HTTPS:
+
+```html
+<!-- Bad -->
+<script src="http://example.com/script.js"></script>
+
+<!-- Good -->
+<script src="https://example.com/script.js"></script>
+```
+
+### API calls fail only over HTTPS
+
+If your frontend is served over HTTPS, it must call envGo over HTTPS too — a
+browser will block `http://127.0.0.1` requests from an HTTPS page. Route them
+through the same origin (for example `/api/chat`) via the reverse proxy.
+
+## Best practices
+
+1. **Use `--tls` for local development only**
+2. **Terminate TLS at Caddy or nginx in production**
+3. **Set `trust_proxy: true` only behind a proxy you control**
+4. **Add security headers explicitly** — nothing adds them for you
+5. **Forward requests through the same origin** so the browser never mixes schemes
+6. **Keep certificate paths readable by the proxy service user**
+
+## Next steps
+
+- [Deploy to VPS](/guides/deploy-to-vps) — full production walkthrough
+- [Security Model](/core-concepts/security-model) — the TLS layer in context
+- [Configuration](/reference/configuration) — `trust_proxy` and friends
