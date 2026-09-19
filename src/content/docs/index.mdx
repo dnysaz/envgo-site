@@ -5,8 +5,10 @@ template: splash
 hero:
   tagline: Keep API keys out of the browser. One Go binary serves your static site and injects .env secrets server-side.
   actions:
+    # Relative on purpose: Starlight does not apply `base` to hero action links,
+    # so an absolute path here would 404 on the GitHub Pages sub-path.
     - text: Get Started
-      link: /getting-started/introduction
+      link: getting-started/introduction
       icon: right-arrow
     - text: View on GitHub
       link: https://github.com/dnysaz/envgo

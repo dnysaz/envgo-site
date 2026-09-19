@@ -23,6 +23,33 @@ Run these from the project root:
 | `npm run build` | Build the production site into `dist/` |
 | `npm run preview` | Preview the built site locally |
 
+## Deployment
+
+This site is published to GitHub Pages at
+**https://dnysaz.github.io/envgo-site/** by the workflow in
+`.github/workflows/deploy.yml` on every push to `main`. You can also trigger it
+manually from the Actions tab.
+
+Because it is a *project* site, it is served from the `/envgo-site/` sub-path,
+not the domain root. That has two consequences worth knowing:
+
+- `astro.config.mjs` sets `site` and `base`, and `base` is baked into every
+generated URL.
+- Astro applies `base` to its own assets and to Starlight's navigation, but
+  **not** to root-relative links written in Markdown content. A small remark
+  plugin in `astro.config.mjs` (`remarkPrefixBase`) adds the prefix so links like
+  `[Installation](/getting-started/installation)` keep working. Page sources stay
+  portable — change `base` to `/` and no content needs editing.
+- Starlight's hero action links do not get the prefix either, so the landing
+  page's hero link is written as a relative path on purpose.
+
+`npm run dev` serves both the bare and the prefixed path locally. Only the
+prefixed path exists once deployed, so verify link changes against
+`npm run preview` (which uses the built output) rather than the dev server.
+
+To move to a custom domain later, set `site` to the domain, set `base` to `/`,
+and add a `CNAME` file in `public/`.
+
 ## Content
 
 All pages are `.mdx` files under `src/content/docs/`:
