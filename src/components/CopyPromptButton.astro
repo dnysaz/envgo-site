@@ -1,0 +1,261 @@
+---
+/*
+  CopyPromptButton — Hero helper for AI agents
+  - Shows a prominent button that copies the full envGo agent prompt to clipboard
+  - Also injects a duplicate button into the Starlight hero actions row so it feels native
+  - Prompt source is /public/envgo-agent-prompt.txt, but embedded here as fallback for offline copy
+*/
+import promptTextRaw from "../../public/envgo-agent-prompt.txt?raw";
+const promptText = promptTextRaw;
+const shortPreview = promptText.slice(0, 180).replace(/\n/g, " ") + "…";
+---
+
+<div id="copy-prompt-card" class="copy-prompt-card">
+  <div class="copy-prompt-head">
+    <div class="copy-prompt-icon">🤖</div>
+    <div>
+      <div class="copy-prompt-title">Pakai AI Agent? Copy prompt ini</div>
+      <div class="copy-prompt-subtitle">
+        Satu klik — agent kamu langsung paham apa itu <strong>envGo</strong>, cara cek install, download otomatis per-OS, sampai <code>envgo run dev</code>. Tidak perlu jelaskan manual.
+      </div>
+    </div>
+  </div>
+
+  <div class="copy-prompt-actions">
+    <button id="copy-prompt-btn" type="button" class="copy-prompt-btn" aria-label="Copy AI prompt for envGo">
+      <span class="btn-icon">📋</span>
+      <span id="copy-prompt-label">Copy AI Prompt</span>
+    </button>
+    <a href="/envgo-site/envgo-agent-prompt.txt" target="_blank" rel="noopener" class="copy-prompt-link">
+      Lihat prompt mentah →
+    </a>
+    <span id="copy-prompt-status" class="copy-prompt-status" aria-live="polite"></span>
+  </div>
+
+  <details class="copy-prompt-details">
+    <summary>Apa yang terjadi setelah di-copy?</summary>
+    <ol>
+      <li>Paste prompt ke AI agent kamu (Cursor / Kilo Code / Copilot / Claude / dll).</li>
+      <li>Agent akan cek <code>envgo -v</code> — jika belum ada, ia download binary yang sesuai OS kamu (Windows / macOS Intel & Silicon / Linux amd64 & arm64) dan install otomatis.</li>
+      <li>Jika sudah ada, agent langsung <code>envgo init</code> → isi <code>.env</code> → <code>envgo run dev</code> dan tunjukkan cara pakai <code>&lt;div id="KEY"&gt;</code> + <code>{"{VAR}"}</code> di <code>/proxy</code>.</li>
+      <li>Jika agent bingung, prompt menyuruhnya buka docs: <a href="/envgo-site/getting-started/quick-start/">quick-start</a> &amp; <a href="/envgo-site/getting-started/installation/">installation</a>.</li>
+    </ol>
+    <p class="copy-prompt-hint">
+      Prompt ini sengaja dibuat <em>self-contained</em> — AI tidak perlu tahu envGo sebelumnya. Isinya sudah mencakup: definisi, link download per-platform, langkah verifikasi, dan contoh HTML/JS siap pakai.
+    </p>
+  </details>
+
+  <!-- hidden textarea for fallback copy -->
+  <textarea id="copy-prompt-source" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;opacity:0;" readonly>{promptText}</textarea>
+</div>
+
+<style>
+  .copy-prompt-card {
+    margin: 1.25rem auto 1.5rem;
+    max-width: 720px;
+    border: 1px solid var(--sl-color-gray-5);
+    background: var(--sl-color-gray-6);
+    border-radius: 16px;
+    padding: 1.1rem 1.2rem;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+  }
+  .copy-prompt-head {
+    display: flex;
+    gap: 0.9rem;
+    align-items: flex-start;
+  }
+  .copy-prompt-icon {
+    font-size: 1.6rem;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .copy-prompt-title {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--sl-color-white);
+  }
+  .copy-prompt-subtitle {
+    margin-top: 0.25rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--sl-color-gray-2);
+  }
+  .copy-prompt-subtitle code {
+    font-size: 0.85em;
+  }
+  .copy-prompt-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    align-items: center;
+    margin-top: 0.95rem;
+  }
+  .copy-prompt-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--sl-color-accent);
+    color: var(--sl-color-accent-high);
+    border: 1px solid var(--sl-color-accent);
+    border-radius: 999px;
+    padding: 0.62rem 1.15rem;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: transform 0.12s, filter 0.12s, box-shadow 0.12s;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  }
+  .copy-prompt-btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+  }
+  .copy-prompt-btn:active {
+    transform: translateY(0);
+  }
+  .copy-prompt-btn.copied {
+    background: #16a34a;
+    border-color: #16a34a;
+    color: white;
+  }
+  .copy-prompt-link {
+    font-size: 0.88rem;
+    text-decoration: none;
+    border-bottom: 1px dashed currentColor;
+  }
+  .copy-prompt-status {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #16a34a;
+    min-height: 1.2em;
+  }
+  .copy-prompt-details {
+    margin-top: 0.85rem;
+    font-size: 0.88rem;
+    color: var(--sl-color-gray-2);
+  }
+  .copy-prompt-details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--sl-color-gray-1);
+  }
+  .copy-prompt-details ol {
+    margin: 0.6rem 0 0.4rem 1.2rem;
+    line-height: 1.6;
+  }
+  .copy-prompt-hint {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    opacity: 0.9;
+  }
+  /* injected hero button */
+  :global(.hero-copy-btn) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-radius: 999px;
+    padding: 0.55rem 1rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    background: var(--sl-color-white);
+    color: var(--sl-color-black);
+    border: 1px solid var(--sl-color-gray-5);
+    cursor: pointer;
+    text-decoration: none;
+  }
+  :global(.hero-copy-btn:hover) {
+    filter: brightness(0.96);
+  }
+</style>
+
+<script is:inline define:vars={{ promptText }}>
+  (function () {
+    function setup() {
+      var btn = document.getElementById("copy-prompt-btn");
+      var label = document.getElementById("copy-prompt-label");
+      var status = document.getElementById("copy-prompt-status");
+      var source = document.getElementById("copy-prompt-source");
+      if (!btn || !label) return;
+
+      var originalLabel = label.textContent;
+
+      async function copyText() {
+        var text = source ? source.value : promptText;
+        // Try modern clipboard API first
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+          }
+        } catch (e) {}
+        // Fallback: execCommand
+        try {
+          if (source) {
+            source.focus();
+            source.select();
+            source.setSelectionRange(0, 999999);
+            var ok = document.execCommand("copy");
+            window.getSelection()?.removeAllRanges();
+            return ok;
+          }
+        } catch (e) {}
+        // Last fallback: prompt
+        try {
+          window.prompt("Copy prompt (Ctrl+C, Enter):", text.slice(0, 1200));
+        } catch (e) {}
+        return false;
+      }
+
+      btn.addEventListener("click", async function () {
+        var ok = await copyText();
+        if (ok) {
+          btn.classList.add("copied");
+          label.textContent = "✓ Copied!";
+          if (status) status.textContent = "Prompt disalin — paste ke AI agent kamu sekarang.";
+          // also update hero duplicate if exists
+          var hb = document.getElementById("hero-copy-prompt-btn");
+          if (hb) hb.textContent = "✓ Copied!";
+          setTimeout(function () {
+            btn.classList.remove("copied");
+            label.textContent = originalLabel;
+            if (status) status.textContent = "";
+            if (hb) hb.textContent = "🤖 Copy AI Prompt";
+          }, 2200);
+        } else {
+          if (status) status.textContent = "Gagal copy otomatis — silakan copy manual dari link mentah.";
+        }
+      });
+
+      // Inject a second button into the hero actions row so it looks native
+      try {
+        var heroActions = document.querySelector(".hero .actions, .hero [data-page-title] + div, header + div .actions");
+        // Starlight splash hero uses .hero .actions
+        if (!heroActions) heroActions = document.querySelector(".hero .actions");
+        if (!heroActions) heroActions = document.querySelector("[data-pagefind-body] .hero .actions");
+        // broader: find the div that contains the two hero link buttons
+        if (!heroActions) {
+          var candidates = document.querySelectorAll(".hero a");
+          if (candidates.length >= 2 && candidates[0].closest("div")) {
+            heroActions = candidates[0].closest("div").parentElement;
+          }
+        }
+        if (heroActions && !document.getElementById("hero-copy-prompt-btn")) {
+          var heroBtn = document.createElement("button");
+          heroBtn.id = "hero-copy-prompt-btn";
+          heroBtn.type = "button";
+          heroBtn.className = "hero-copy-btn";
+          heroBtn.textContent = "🤖 Copy AI Prompt";
+          heroBtn.title = "Copy prompt untuk AI agent kamu";
+          heroBtn.addEventListener("click", function () { btn.click(); });
+          // Insert as third action
+          heroActions.appendChild(heroBtn);
+        }
+      } catch (e) {}
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", setup);
+    } else {
+      setup();
+    }
+  })();
+</script>

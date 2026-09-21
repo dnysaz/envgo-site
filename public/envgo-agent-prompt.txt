@@ -1,0 +1,165 @@
+# envGo — Prompt for your AI Agent
+
+Copy this entire prompt and paste it to your AI coding agent (Cursor, Copilot, Kilo Code, Claude, etc.). The agent will read it and set up envGo for you automatically.
+
+---
+
+You are helping the user use **envGo**.
+
+## What is envGo?
+
+envGo is a zero-dependency, single-binary micro-runtime (Go) that lets a plain HTML + Vanilla JS site use `.env` secrets WITHOUT exposing them to the browser. It serves static files and proxies API calls, substituting `{VAR_NAME}` placeholders with real values inside the Go process — invisible to DevTools, Network tab, and browser memory.
+
+- Single binary ~2-12 MB, no Node.js, no `node_modules`, no runtime to install
+- Secrets NEVER reach the browser. `GET /__env.js` only returns boolean flags, `GET /__env/KEY` is 404.
+- Two modes: Local mode (`/proxy` + session token, for dev) and Public mode (`/api/<name>` fixed routes, for production)
+- Features: hot-reload `.env` (~1.5s), dashboard at `/__envgo_dashboard`, SSE streaming, PHP support, typo detection, cross-platform (macOS/Linux/Windows amd64+arm64), MIT licensed, no telemetry.
+
+Docs (if you are confused, READ THIS FIRST): https://dnysaz.github.io/envgo-site/
+Repo: https://github.com/dnysaz/envgo
+Download: https://github.com/dnysaz/envgo/releases/latest
+
+## Your job
+
+Help the user get from zero to `envgo run dev` with minimal friction. Follow these steps in order:
+
+### Step 1 — Check if envGo is already installed
+
+Run:
+```
+envgo -v
+```
+- If it prints a version (e.g. `envGo v1.0.0`), it is installed and ready. Skip to Step 3.
+- If command not found, go to Step 2.
+
+Also check `which envgo` / `where envgo` and whether `~/.local/bin` or `C:\envgo` is on PATH.
+
+### Step 2 — Download and install automatically (if not installed)
+
+Detect OS/arch first:
+
+- macOS: `uname -m` → `arm64` = Apple Silicon, `x86_64` = Intel
+- Linux: `uname -m` → `x86_64` = amd64, `aarch64`/`arm64` = arm64
+- Windows: assume amd64 unless user says ARM
+
+Then download from GitHub Releases (always latest):
+
+- macOS Apple Silicon: https://github.com/dnysaz/envgo/releases/latest/download/envGo-macOS-AppleSilicon.zip
+- macOS Intel: https://github.com/dnysaz/envgo/releases/latest/download/envGo-macOS-Intel.zip
+- Linux amd64: https://github.com/dnysaz/envgo/releases/latest/download/envgo-linux-amd64
+- Linux arm64: https://github.com/dnysaz/envgo/releases/latest/download/envgo-linux-arm64
+- Windows amd64: https://github.com/dnysaz/envgo/releases/latest/download/envgo-windows-amd64.exe
+- Windows arm64: https://github.com/dnysaz/envgo/releases/latest/download/envgo-windows-arm64.exe
+- SHA256SUMS: https://github.com/dnysaz/envgo/releases/latest/download/SHA256SUMS
+
+Install per platform:
+
+**macOS (prefer ZIP installer):**
+```bash
+# Apple Silicon example
+mkdir -p ~/.local/bin
+unzip ~/Downloads/envGo-macOS-AppleSilicon.zip -d /tmp/envgo
+cp /tmp/envgo/dist/envgo-darwin-arm64 ~/.local/bin/envgo
+chmod +x ~/.local/bin/envgo
+# add to PATH if needed
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+envgo -v
+```
+Or double-click `Install_envGo.command` inside the ZIP.
+
+If Gatekeeper blocks: `xattr -dr com.apple.quarantine ~/.local/bin/envgo` or right-click → Open.
+
+**Linux:**
+```bash
+chmod +x ~/Downloads/envgo-linux-amd64
+sudo mv ~/Downloads/envgo-linux-amd64 /usr/local/bin/envgo
+envgo -v
+```
+
+**Windows (PowerShell, run as user):**
+```powershell
+mkdir C:\envgo
+copy $env:USERPROFILE\Downloads\envgo-windows-amd64.exe C:\envgo\envgo.exe
+[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path","User") + ";C:\envgo", "User")
+# Open NEW terminal then:
+envgo -v
+```
+
+If download fails or user is offline, tell them to manually download from https://dnysaz.github.io/envgo-site/download/ and retry `envgo -v`.
+
+### Step 3 — Create or use a project
+
+If user already has a static site folder (with `index.html`), cd into it. Otherwise create one:
+
+```bash
+mkdir myapp && cd myapp
+envgo init
+```
+
+This creates: `.env`, `.env.example`, `index.html`, `.gitignore`, `README.md`
+
+`envgo init -name myapp` creates a subfolder if needed.
+
+### Step 4 — Configure .env
+
+Ensure `.env` exists and has real values:
+
+```
+MY_SECRET=your-real-value
+OPENAI_API_KEY=sk-...   # example
+HOST=127.0.0.1
+PORT=8080
+```
+
+Notes:
+- `HOST`/`PORT` control where `envgo run dev` listens. Changing `PORT=3000` makes it http://127.0.0.1:3000/. Only `envgo run` reads them; flags like `--port 4000` override.
+- Every `<div id="KEY">` in HTML and every `{KEY}` placeholder must match a key in `.env`. Otherwise envGo shows a red banner with suggestion.
+- `.env` is gitignored. Never commit it.
+
+### Step 5 — Run
+
+```bash
+envgo run dev
+# → http://127.0.0.1:8080/  (or HOST:PORT from .env, browser opens automatically)
+```
+
+Frontend usage:
+
+**HTML — variable presence check (no value leaked):**
+```html
+<div id="MY_SECRET"></div>
+<script src="/__env.js"></script>
+```
+
+**JS — proxy via local mode (needs token handshake):**
+```js
+const token = await fetch("/__envgo_token").then(r => r.text());
+const res = await fetch("/proxy", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "X-EnvGo-Token": token },
+  body: JSON.stringify({
+    target_url: "https://api.openai.com/v1/chat/completions",
+    method: "POST",
+    headers: { Authorization: "Bearer {OPENAI_API_KEY}" },
+    body: { model: "gpt-4o", messages: [{ role: "user", content: "Hi" }] }
+  })
+});
+```
+
+**Public mode (no token, fixed routes):**
+- Create `envgo.routes.json`, run `envgo --config envgo.routes.json --env .env --dir . -b`
+- Frontend calls `fetch("/api/chat", { method: "POST", body: JSON.stringify({...}) })`
+
+### Step 6 — Verify
+
+- Page should show `✓ MY_SECRET — Success` if key exists, or red banner if typo.
+- Dashboard at `/__envgo_dashboard` shows variable names (never values) + recent requests.
+- If `envgo run dev` fails to bind, it tries next 20 ports automatically.
+
+### If you are stuck
+
+- Read the docs: https://dnysaz.github.io/envgo-site/getting-started/quick-start/
+- Check `envgo -h` for flags (`--allow`, `--config`, `--tls`, `--dashboard`, `-b`)
+- For production: use Caddy/nginx as reverse proxy, `trust_proxy: true`, and restrict `--allow` or use public mode with per-route `rate_limit` and `scrub_response`.
+
+Do not ask user to install Node.js, npm, or any other runtime. envGo is the only binary needed.
