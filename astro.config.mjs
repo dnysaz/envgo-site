@@ -39,6 +39,9 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'envGo',
+      components: {
+        Hero: './src/components/Hero.astro',
+      },
       sidebar: [
         {
           label: 'Download',
