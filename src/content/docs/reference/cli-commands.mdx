@@ -25,14 +25,15 @@ arguments — so you get a plain server with debug logging, **not** dev mode.
 
 ## Starting the server
 
-envGo has two modes, selected by whether you pass `--config`:
+envGo has two modes, selected by `--config` **or** `.env`:
 
 | Invocation | Mode | What it does |
 |------------|------|--------------|
 | `envgo` | Local | Static file server + `/proxy` with session token |
-| `envgo run` | Local | Same, but reads `HOST`/`PORT` from `.env` |
+| `envgo run` | Local | Same, but reads `HOST`/`PORT`/`MODE_PUBLIC` from `.env` |
 | `envgo run dev` / `envgo dev` | Local (dev) | Same as `run`, and always opens a browser |
 | `envgo --config routes.json` | Public | Fixed routes at `/api/<name>`, no token handshake |
+| `MODE_PUBLIC=true envgo run` | Public | Same as `--config`, but via `.env` (`CONFIG` optional) |
 
 ## Commands
 
@@ -75,9 +76,9 @@ If the requested port is already in use, envGo tries the next 19 ports
 (`8080` → `8081` → … → `8099`) before giving up. The address actually bound is
 printed at startup, so check the log if you do not get the port you asked for.
 
-### `HOST` and `PORT` from `.env`
+### `HOST`, `PORT`, and `MODE_PUBLIC` from `.env`
 
-These are only read when you use `envgo run` or `envgo run dev`, **and** only if
+`HOST`/`PORT` are only read when you use `envgo run` or `envgo run dev`, **and** only if
 you did not override them on the command line:
 
 - `HOST` is used only when `--host` is still at its default `127.0.0.1`
@@ -85,6 +86,26 @@ you did not override them on the command line:
 
 Both uppercase (`HOST`) and lowercase (`host`) keys are accepted. A leading colon
 in `PORT` is stripped, so `PORT=:3000` works.
+
+`MODE_PUBLIC` / `CONFIG` are read **on every start** (even plain `envgo`), when `--config` is not given:
+
+- `MODE_PUBLIC=true` / `1` / `yes` / `public` → public mode (looks for `envgo.routes.json` or `routes.json`)
+- `MODE_PUBLIC=false` / `0` / `no` / `local` → local mode
+- Aliases: `MODE`, `PUBLIC_MODE`, `ENVGO_MODE` (same values)
+- `CONFIG` / `ENVGO_CONFIG` / `ROUTES` = explicit path (wins over `MODE_PUBLIC`), relative paths resolved against `.env` dir and `--dir`
+- Flag `--config` always wins over `.env`
+
+Example:
+
+```env
+# .env
+MODE_PUBLIC=true
+# or CONFIG=custom/myroutes.json
+```
+
+```bash
+envgo run dev   # no flag needed — reads MODE_PUBLIC from .env
+```
 
 With plain `envgo --config … --port 8080`, `.env` is **not** consulted for
 `HOST`/`PORT`. This trips people up when editing `.env` to change the port of a
@@ -114,7 +135,7 @@ Values are never compared.
 
 ### Public mode disables the local endpoints
 
-When `--config` is set, `/proxy`, `/__envgo_token`, the legacy `/__env/*` path
+When `--config` is set **or** `MODE_PUBLIC=true` / `CONFIG` in `.env` enables public mode, `/proxy`, `/__envgo_token`, the legacy `/__env/*` path
 and the dashboard are all disabled (the last one unless you also pass
 `--dashboard`). Only `/api/<name>` plus static files are served.
 
@@ -141,8 +162,11 @@ envgo run dev --debug
 # Different port, restricted allowlist, auto-open browser
 envgo -p 3000 -d . -e .env -a api.openai.com -b
 
-# Public mode: fixed routes, no token handshake
+# Public mode: fixed routes, no token handshake (via flag)
 envgo --config envgo.routes.json --env .env --dir . --host 127.0.0.1 --port 8080
+
+# Public mode via .env (no flag) — set MODE_PUBLIC=true or CONFIG=envgo.routes.json in .env
+envgo run dev
 
 # Public mode with the dashboard enabled (for debugging only)
 envgo --config envgo.routes.json --env .env --dashboard
@@ -168,7 +192,7 @@ Running `envgo init` writes five files into the target directory:
 
 | File | Contents |
 |------|----------|
-| `.env` | `MY_SECRET=change-me`, `HOST=127.0.0.1`, `PORT=8080` (mode `0600`) |
+| `.env` | `MY_SECRET=change-me`, `HOST=127.0.0.1`, `PORT=8080`, `MODE_PUBLIC=false`, `CONFIG=envgo.routes.json` (mode `0600`) |
 | `.env.example` | The same placeholder content |
 | `index.html` | Minimal page with `<div id="MY_SECRET"></div>` and `/__env.js` |
 | `.gitignore` | Ignores `.env`, `*.key`, `*.secret` |

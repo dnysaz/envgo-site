@@ -22,10 +22,10 @@ zero variables, then picks the file up as soon as it appears. It does **not**
 merge multiple files, and it does **not** layer `.env` on top of the process
 environment.
 
-:::note[`HOST` and `PORT` are special]
-They are only consulted by `envgo run` / `envgo run dev`, and only when the
-corresponding flag is still at its default. See
-[CLI Commands](/reference/cli-commands#host-and-port-from-env).
+:::note[`HOST`, `PORT`, `MODE_PUBLIC` and `CONFIG` are special]
+`HOST`/`PORT` are only consulted by `envgo run` / `envgo run dev`, and only when the
+corresponding flag is still at its default. `MODE_PUBLIC`/`CONFIG` switch public mode without flags. See
+[CLI Commands](/reference/cli-commands#host-port-and-mode_public-from-env).
 :::
 
 ## File format
@@ -125,7 +125,7 @@ SECRET_KEY=9f3c1d7a...
 ```
 
 At startup envGo compares only the **key names** of the two files and warns about
-mismatches in either direction — it never compares values.
+mismatches in either direction — it never compares values. Keys `MODE_PUBLIC`, `CONFIG`, `HOST`, `PORT` are ignored for this check and never treated as secrets in logs.
 
 ## Using variables in HTML
 
