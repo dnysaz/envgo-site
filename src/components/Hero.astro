@@ -5,173 +5,285 @@ import promptTextRaw from "../../public/envgo-agent-prompt.txt?raw";
 
 const { data } = Astro.locals.starlightRoute.entry;
 const hero = data.hero || {};
-let { title = data.title, tagline, image, actions = [] } = hero;
-
-// Keep original actions (Get Started, View on GitHub) but we will render
-// a native Copy AI Prompt button between them for a tidy single row.
+let { title = data.title, tagline } = hero;
 const promptText = promptTextRaw;
 ---
 
-<div class="hero">
-  <div class="sl-flex stack">
-    <div class="sl-flex copy">
-      <div class="eyebrow">Zero-dependency • No telemetry • MIT Licensed</div>
-      <h1 id={PAGE_TITLE_ID} data-page-title set:html={title} />
-      {tagline && <div class="tagline" set:html={tagline} />}
-      <p class="subtagline">
-        Paste one prompt into your AI agent and go from <code>envgo -v</code> check → auto-install → <code>envgo run dev</code> without manual setup.
+<section class="go-hero">
+  <div class="go-grid">
+    <div class="go-blurb">
+      <h1 id={PAGE_TITLE_ID} data-page-title>Keep API keys out of the browser</h1>
+      <p class="go-tagline">One Go binary serves your static site and injects <code>.env</code> secrets server-side — invisible to DevTools and the Network tab.</p>
+
+      <ul class="go-checklist">
+        <li>
+          <svg width="12" height="10" viewBox="0 0 12 10" fill="none" aria-hidden="true"><path d="M10.8519 0.52594L3.89189 7.10404L1.14811 4.51081L0 5.59592L3.89189 9.27426L12 1.61105L10.8519 0.52594Z" fill="white" fill-opacity="0.95"/></svg>
+          Single binary ~2–12 MB — no Node, no <code>node_modules</code>
+        </li>
+        <li>
+          <svg width="12" height="10" viewBox="0 0 12 10" fill="none" aria-hidden="true"><path d="M10.8519 0.52594L3.89189 7.10404L1.14811 4.51081L0 5.59592L3.89189 9.27426L12 1.61105L10.8519 0.52594Z" fill="white" fill-opacity="0.95"/></svg>
+          Secrets never reach the browser — <code>{"{VAR}"}</code> replaced server-side
+        </li>
+        <li>
+          <svg width="12" height="10" viewBox="0 0 12 10" fill="none" aria-hidden="true"><path d="M10.8519 0.52594L3.89189 7.10404L1.14811 4.51081L0 5.59592L3.89189 9.27426L12 1.61105L10.8519 0.52594Z" fill="white" fill-opacity="0.95"/></svg>
+          Local &amp; public gateways, hot-reload, dashboard &amp; PHP support
+        </li>
+        <li>
+          <svg width="12" height="10" viewBox="0 0 12 10" fill="none" aria-hidden="true"><path d="M10.8519 0.52594L3.89189 7.10404L1.14811 4.51081L0 5.59592L3.89189 9.27426L12 1.61105L10.8519 0.52594Z" fill="white" fill-opacity="0.95"/></svg>
+          Cross-platform • MIT • No telemetry
+        </li>
+      </ul>
+
+      <div class="go-actions">
+        <a class="go-primary" href="getting-started/introduction">Get Started</a>
+        <button id="hero-copy-prompt-btn" type="button" class="go-secondary" aria-label="Copy AI prompt">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-1a1 1 0 1 0 0 2h1a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1a1 1 0 1 0 2 0V7Z"/><path d="M5 11a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-8Zm3-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1H8Z"/></svg>
+          <span id="hero-copy-label">Copy AI Prompt</span>
+        </button>
+      </div>
+
+      <p class="go-footnote">
+        <span id="hero-copy-status" aria-live="polite"></span>
+        <span class="go-footnote-links">
+          <a href="/envgo-site/envgo-agent-prompt.txt" target="_blank" rel="noopener">View raw prompt</a>
+          <span class="sep">•</span>
+          <a href="https://github.com/dnysaz/envgo" target="_blank" rel="noopener">View on GitHub</a>
+          <span class="sep">•</span>
+          Works with Cursor, Kilo Code, Copilot, Claude
+        </span>
       </p>
     </div>
-    <div class="sl-flex actions">
-      {
-        actions.map(({ attrs: { class: className, ...attrs } = {}, icon, link: href, text, variant }) => {
-          // Render the first action (Get Started) as primary
-          if (text === "Get Started") {
-            return (
-              <LinkButton href={href} variant="primary" icon={icon?.name} class:list={[className]} {...attrs}>
-                {text}
-              </LinkButton>
-            );
-          }
-          return null;
-        })
-      }
-      <button id="hero-copy-prompt-btn" type="button" class="sl-link-button not-content secondary hero-copy-btn" aria-label="Copy AI prompt for envGo">
-        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size:1.2rem"><path d="M7 7a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-1a1 1 0 0 0 0 2h1a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1a1 1 0 1 0 2 0V7Z"/><path d="M5 11a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-8Zm3-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1H8Z"/></svg>
-        <span id="hero-copy-label">Copy AI Prompt</span>
-      </button>
-      {
-        actions.map(({ attrs: { class: className, ...attrs } = {}, icon, link: href, text, variant }) => {
-          if (text === "View on GitHub") {
-            return (
-              <LinkButton href={href} variant="minimal" icon={icon?.name} class:list={[className]} {...attrs}>
-                {text}
-              </LinkButton>
-            );
-          }
-          return null;
-        })
-      }
-    </div>
-    <div class="hero-hint">
-      <span id="hero-copy-status" aria-live="polite"></span>
-      <span class="hero-hint-sep">·</span>
-      <a href="/envgo-site/envgo-agent-prompt.txt" target="_blank" rel="noopener">View raw prompt</a>
-      <span class="hero-hint-sep">·</span>
-      <span>Works with Cursor, Kilo Code, Copilot, Claude &amp; more</span>
+
+    <div class="go-illustration" aria-hidden="true">
+      <div class="go-terminal">
+        <div class="go-terminal-bar"><span></span><span></span><span></span></div>
+<pre><span class="dim">$</span> envgo -v
+<span class="out">envGo v1.0.0</span>
+<span class="dim">$</span> envgo init
+<span class="out">  .env  .env.example  index.html</span>
+<span class="dim">$</span> envgo run dev
+<span class="out">→ http://127.0.0.1:8080/</span></pre>
+      </div>
+      <p class="go-illus-caption">Paste one prompt → agent checks, installs, and runs</p>
     </div>
   </div>
-</div>
+</section>
 
 <textarea id="hero-prompt-source" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;opacity:0;" readonly>{promptText}</textarea>
 
 <style>
-  .hero {
+  .go-hero {
+    background: #007d9c;
+    color: white;
+    margin: calc(-1 * var(--sl-content-pad-x, 1.5rem)) calc(-1 * var(--sl-content-pad-x, 1.5rem)) 0;
+    padding: 2.2rem var(--sl-content-pad-x, 1.5rem) 1.8rem;
+    /* full-bleed on splash template */
+    width: calc(100% + 2 * var(--sl-content-pad-x, 1.5rem));
+    max-width: none;
+  }
+  :global(.content-panel) .go-hero {
+    /* Starlight splash puts hero inside .sl-container; pull it full width */
+    margin-top: -1.5rem;
+  }
+  .go-grid {
+    max-width: 1100px;
+    margin: 0 auto;
     display: grid;
-    align-items: center;
-    gap: 1rem;
-    padding-bottom: 1rem;
-  }
-  .stack {
-    flex-direction: column;
-    gap: 1.25rem;
-    text-align: center;
-    align-items: center;
-    max-width: 760px;
-    margin-inline: auto;
-  }
-  .copy {
-    flex-direction: column;
-    gap: 0.85rem;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 2.2rem;
     align-items: center;
   }
-  .copy > * {
-    max-width: 58ch;
-  }
-  .eyebrow {
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-weight: 700;
-    color: var(--sl-color-gray-2);
-    border: 1px solid var(--sl-color-gray-5);
-    background: var(--sl-color-gray-6);
-    padding: 0.28rem 0.7rem;
-    border-radius: 999px;
-  }
-  h1 {
-    font-size: clamp(var(--sl-text-3xl), calc(0.25rem + 5vw), var(--sl-text-6xl));
-    line-height: var(--sl-line-height-headings);
-    font-weight: 700;
-    color: var(--sl-color-white);
+  .go-blurb h1 {
+    font-size: clamp(1.9rem, 3.2vw + 0.6rem, 2.7rem);
+    line-height: 1.08;
+    font-weight: 800;
     letter-spacing: -0.02em;
+    color: white;
+    margin: 0 0 0.7rem;
   }
-  .tagline {
-    font-size: clamp(var(--sl-text-base), calc(0.0625rem + 1.8vw), var(--sl-text-xl));
-    color: var(--sl-color-gray-2);
-    line-height: 1.45;
+  .go-tagline {
+    font-size: 1.02rem;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.92);
+    margin: 0 0 1.1rem;
+    max-width: 52ch;
   }
-  .subtagline {
-    font-size: 0.92rem;
-    color: var(--sl-color-gray-3);
-    line-height: 1.55;
-    max-width: 56ch;
-  }
-  .subtagline code {
-    font-size: 0.88em;
-    background: var(--sl-color-gray-6);
-    padding: 0.12rem 0.35rem;
+  .go-tagline code {
+    background: rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.22);
+    padding: 0.08rem 0.32rem;
     border-radius: 6px;
-    border: 1px solid var(--sl-color-gray-5);
+    font-size: 0.9em;
+    color: white;
   }
-  .actions {
-    gap: 0.75rem;
+  .go-checklist {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .go-checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    font-size: 0.94rem;
+    line-height: 1.45;
+    color: rgba(255,255,255,0.95);
+  }
+  .go-checklist svg {
+    flex-shrink: 0;
+    margin-top: 0.42rem;
+  }
+  .go-checklist code {
+    background: rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.18);
+    padding: 0.06rem 0.3rem;
+    border-radius: 5px;
+    font-size: 0.88em;
+    color: white;
+  }
+  .go-actions {
+    display: flex;
     flex-wrap: wrap;
-    justify-content: center;
+    gap: 0.75rem;
     align-items: center;
+    margin-bottom: 0.9rem;
   }
-  .hero-copy-btn {
+  .go-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    color: #007d9c;
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 0.62rem 1.25rem;
+    border-radius: 4px;
+    text-decoration: none;
+    border: 1px solid white;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  }
+  .go-primary:hover {
+    background: #f2f8fa;
+  }
+  .go-secondary {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    cursor: pointer;
+    background: transparent;
+    color: white;
     font-weight: 600;
-    border-color: var(--sl-color-gray-3) !important;
-    background: var(--sl-color-white);
-    color: var(--sl-color-black) !important;
+    font-size: 0.95rem;
+    padding: 0.58rem 1.15rem;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.9);
+    cursor: pointer;
   }
-  .hero-copy-btn:hover {
-    background: var(--sl-color-gray-7);
+  .go-secondary:hover {
+    background: rgba(255,255,255,0.12);
   }
-  .hero-copy-btn.copied {
-    background: #16a34a !important;
-    border-color: #16a34a !important;
-    color: white !important;
+  .go-secondary.copied {
+    background: white;
+    color: #007d9c;
+    border-color: white;
   }
-  .hero-hint {
+  .go-footnote {
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.82);
+    margin: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem 0.6rem;
+    gap: 0.35rem 0.6rem;
     align-items: center;
-    justify-content: center;
-    font-size: 0.82rem;
-    color: var(--sl-color-gray-3);
   }
-  .hero-hint a {
-    color: var(--sl-color-gray-2);
+  .go-footnote a {
+    color: white;
     text-decoration: underline;
     text-underline-offset: 3px;
+    text-decoration-color: rgba(255,255,255,0.6);
   }
-  .hero-hint-sep {
-    opacity: 0.5;
+  .go-footnote .sep {
+    opacity: 0.6;
+    margin: 0 0.1rem;
   }
   #hero-copy-status {
     font-weight: 600;
-    color: #16a34a;
+    color: #fff;
+    background: rgba(255,255,255,0.16);
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
   }
-  @media (min-width: 50rem) {
-    .hero {
-      padding-block: clamp(2rem, calc(1rem + 6vmin), 7rem);
+  #hero-copy-status:empty {
+    display: none;
+  }
+  .go-illustration {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .go-terminal {
+    background: #0f172a;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    width: 100%;
+    max-width: 380px;
+    overflow: hidden;
+  }
+  .go-terminal-bar {
+    display: flex;
+    gap: 0.38rem;
+    padding: 0.65rem 0.8rem;
+    background: rgba(255,255,255,0.06);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .go-terminal-bar span {
+    width: 0.68rem;
+    height: 0.68rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.18);
+  }
+  .go-terminal-bar span:nth-child(1) { background: #ff5f56; }
+  .go-terminal-bar span:nth-child(2) { background: #ffbd2e; }
+  .go-terminal-bar span:nth-child(3) { background: #27c93f; }
+  .go-terminal pre {
+    margin: 0;
+    padding: 0.9rem 1rem 1rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: #cbd5e1;
+    white-space: pre-wrap;
+  }
+  .go-terminal .dim { color: #64748b; }
+  .go-terminal .out { color: #7dd3fc; }
+  .go-illus-caption {
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.78);
+    text-align: center;
+    margin: 0;
+  }
+
+  @media (max-width: 50rem) {
+    .go-hero {
+      padding: 1.6rem var(--sl-content-pad-x, 1rem) 1.4rem;
+    }
+    .go-grid {
+      grid-template-columns: 1fr;
+      gap: 1.4rem;
+    }
+    .go-illustration {
+      order: -1;
+      max-width: 420px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .go-blurb h1 {
+      font-size: 1.85rem;
     }
   }
 </style>
@@ -207,17 +319,16 @@ const promptText = promptTextRaw;
       }
       btn.addEventListener("click", async function () {
         var ok = await copyText();
-        // also trigger the card button if present to keep states in sync
         var cardBtn = document.getElementById("copy-prompt-btn");
         var cardLabel = document.getElementById("copy-prompt-label");
         var cardStatus = document.getElementById("copy-prompt-status");
         if (ok) {
           btn.classList.add("copied");
           label.textContent = "✓ Copied!";
-          if (status) status.textContent = "Copied — paste into your AI agent now.";
+          if (status) status.textContent = "Copied — paste into your AI agent";
           if (cardBtn) cardBtn.classList.add("copied");
           if (cardLabel) cardLabel.textContent = "✓ Copied!";
-          if (cardStatus) cardStatus.textContent = "Copied — paste into your AI agent now.";
+          if (cardStatus) cardStatus.textContent = "Copied — paste into your AI agent";
           setTimeout(function () {
             btn.classList.remove("copied");
             label.textContent = original;
@@ -227,7 +338,7 @@ const promptText = promptTextRaw;
             if (cardStatus) cardStatus.textContent = "";
           }, 2200);
         } else {
-          if (status) status.textContent = "Copy failed — use View raw prompt.";
+          if (status) status.textContent = "Copy failed — use View raw prompt";
         }
       });
     }
