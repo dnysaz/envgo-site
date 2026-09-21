@@ -25,30 +25,19 @@ Run these from the project root:
 
 ## Deployment
 
-This site is published to GitHub Pages at
-**https://dnysaz.github.io/envgo-site/** by the workflow in
-`.github/workflows/deploy.yml` on every push to `main`. You can also trigger it
-manually from the Actions tab.
+This site is published to **https://envgo.dev** (custom domain, `CNAME` in
+`public/CNAME`) via GitHub Pages by the workflow in `.github/workflows/deploy.yml`
+on every push to `main`. You can also trigger it manually from the Actions tab.
+Legacy URL **https://dnysaz.github.io/envgo-site/** still redirects.
 
-Because it is a *project* site, it is served from the `/envgo-site/` sub-path,
-not the domain root. That has two consequences worth knowing:
+It is a custom-domain site served from the root, so `astro.config.mjs` sets
+`site: https://envgo.dev` and `base: /`. A small remark plugin
+(`remarkPrefixBase`) remains for portability — it no-ops when `base` is `/`,
+so links like `[Installation](/getting-started/installation)` work on both
+the custom domain and local preview. Page sources stay portable.
 
-- `astro.config.mjs` sets `site` and `base`, and `base` is baked into every
-generated URL.
-- Astro applies `base` to its own assets and to Starlight's navigation, but
-  **not** to root-relative links written in Markdown content. A small remark
-  plugin in `astro.config.mjs` (`remarkPrefixBase`) adds the prefix so links like
-  `[Installation](/getting-started/installation)` keep working. Page sources stay
-  portable — change `base` to `/` and no content needs editing.
-- Starlight's hero action links do not get the prefix either, so the landing
-  page's hero link is written as a relative path on purpose.
-
-`npm run dev` serves both the bare and the prefixed path locally. Only the
-prefixed path exists once deployed, so verify link changes against
-`npm run preview` (which uses the built output) rather than the dev server.
-
-To move to a custom domain later, set `site` to the domain, set `base` to `/`,
-and add a `CNAME` file in `public/`.
+`npm run dev` serves from the root locally. Verify link changes against
+`npm run preview` (built output) rather than the dev server.
 
 ## Content
 
