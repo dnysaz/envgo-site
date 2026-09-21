@@ -18,6 +18,8 @@ hero:
 
 import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
 
+[![Latest release](https://img.shields.io/github/v/release/dnysaz/envgo?label=latest%20release)](https://github.com/dnysaz/envgo/releases/latest) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/dnysaz/envgo/blob/main/LICENSE) [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8.svg)](https://go.dev)
+
 ## Why envGo
 
 `fetch()` calls written in front-end JavaScript ship your API key to every
@@ -150,18 +152,20 @@ MY_SECRET=some-real-value
 OPENAI_API_KEY=sk-your-real-key-here
 HOST=127.0.0.1
 PORT=8080
+MODE_PUBLIC=false
+# CONFIG=envgo.routes.json
 ```
 
-`HOST` and `PORT` are not secrets — they choose where `envgo run dev` listens, so
-changing `PORT=8080` to `PORT=3000` makes it serve `http://127.0.0.1:3000/`
-instead. They only apply to `envgo run` and `envgo run dev`; a flag like
-`--port 4000` overrides them.
+`HOST`/`PORT`/`MODE_PUBLIC`/`CONFIG` are not secrets — they control where and how envGo runs:
+
+* `HOST`/`PORT` choose where `envgo run dev` listens (`PORT=3000` → `http://127.0.0.1:3000/`). Only for `envgo run`.
+* `MODE_PUBLIC=true` (or `MODE=public`, `ENVGO_MODE`, `CONFIG=envgo.routes.json`) switches to public mode **without flags** — `envgo run dev` alone serves `/api/<name>` with `envgo.routes.json`. `false`/`local` keeps local `/proxy` mode. Flag `--config` always wins. See [CLI Commands](/reference/cli-commands#host-port-and-mode_public-from-env).
 
 ## Choose a mode
 
 | | Local mode | Public mode |
 |---|-----------|-------------|
-| Enable with | *(default)* | `--config envgo.routes.json` |
+| Enable with | *(default)* or `MODE_PUBLIC=false` in `.env` | `--config envgo.routes.json` or `MODE_PUBLIC=true` / `CONFIG=envgo.routes.json` in `.env` |
 | Browser calls | `/proxy` with a session token | `/api/<name>`, no token |
 | Target URL comes from | The browser, restricted by `--allow` | The config file |
 | Rate limiting | None | Per-route, per-IP |
