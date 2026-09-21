@@ -50,6 +50,10 @@ export default defineConfig({
           slug: 'download',
         },
         {
+          label: 'Comparison',
+          slug: 'reference/comparison',
+        },
+        {
           label: 'License & feedback',
           slug: 'license',
         },
@@ -91,7 +95,6 @@ export default defineConfig({
             { label: 'CLI Commands', slug: 'reference/cli-commands' },
             { label: 'Configuration', slug: 'reference/configuration' },
             { label: 'Threat Model', slug: 'reference/threat-model' },
-            { label: 'Comparison', slug: 'reference/comparison' },
           ],
         },
       ],
