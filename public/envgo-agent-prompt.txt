@@ -15,7 +15,7 @@ envGo is a zero-dependency, single-binary micro-runtime (Go) that lets a plain H
 - Two modes: Local mode (`/proxy` + session token, for dev) and Public mode (`/api/<name>` fixed routes, for production)
 - Features: hot-reload `.env` (~1.5s), dashboard at `/__envgo_dashboard`, SSE streaming, PHP support, typo detection, cross-platform (macOS/Linux/Windows amd64+arm64), MIT licensed, no telemetry.
 
-Docs (if you are confused, READ THIS FIRST): https://dnysaz.github.io/envgo-site/
+Docs (if you are confused, READ THIS FIRST): https://envgo.dev/
 Repo: https://github.com/dnysaz/envgo
 Download: https://github.com/dnysaz/envgo/releases/latest
 
@@ -85,7 +85,7 @@ copy $env:USERPROFILE\Downloads\envgo-windows-amd64.exe C:\envgo\envgo.exe
 envgo -v
 ```
 
-If download fails or user is offline, tell them to manually download from https://dnysaz.github.io/envgo-site/download/ and retry `envgo -v`.
+If download fails or user is offline, tell them to manually download from https://envgo.dev/download/ and retry `envgo -v`.
 
 ### Step 3 — Create or use a project
 
@@ -158,7 +158,7 @@ const res = await fetch("/proxy", {
 
 ### If you are stuck
 
-- Read the docs: https://dnysaz.github.io/envgo-site/getting-started/quick-start/
+- Read the docs: https://envgo.dev/getting-started/quick-start/
 - Check `envgo -h` for flags (`--allow`, `--config`, `--tls`, `--dashboard`, `-b`)
 - For production: use Caddy/nginx as reverse proxy, `trust_proxy: true`, and restrict `--allow` or use public mode with per-route `rate_limit` and `scrub_response`.
 

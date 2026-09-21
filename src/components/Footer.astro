@@ -9,12 +9,13 @@ const year = new Date().getFullYear();
 // Only show the big Go-style footer on the homepage (splash).
 // Docs pages get no footer at all per request: "footer cuma di homepage saja".
 const pathname = Astro.url.pathname;
-// Starlight splash homepage: "/" or "/envgo-site/" or "/envgo-site/index.html"
+// Homepage on custom domain envgo.dev ("/") and legacy GitHub Pages ("/envgo-site/")
 const isHomepage =
   pathname === '/' ||
   pathname === '/envgo-site/' ||
   pathname === '/envgo-site' ||
   pathname === '/envgo-site/index.html' ||
+  pathname === '/index.html' ||
   Astro.locals.starlightRoute?.id === 'index' ||
   Astro.locals.starlightRoute?.entry?.slug === '' ||
   Astro.locals.starlightRoute?.entry?.id === 'index';
@@ -38,21 +39,21 @@ if (!isHomepage) {
       <nav class="go-footer-links" aria-label="Footer">
         <div>
           <div class="go-footer-heading">Docs</div>
-          <a href="/envgo-site/getting-started/introduction/">Introduction</a>
-          <a href="/envgo-site/getting-started/installation/">Installation</a>
-          <a href="/envgo-site/getting-started/quick-start/">Quick Start</a>
+          <a href="/getting-started/introduction/">Introduction</a>
+          <a href="/getting-started/installation/">Installation</a>
+          <a href="/getting-started/quick-start/">Quick Start</a>
         </div>
         <div>
           <div class="go-footer-heading">Reference</div>
-          <a href="/envgo-site/reference/cli-commands/">CLI</a>
-          <a href="/envgo-site/reference/configuration/">Configuration</a>
-          <a href="/envgo-site/reference/threat-model/">Threat Model</a>
+          <a href="/reference/cli-commands/">CLI</a>
+          <a href="/reference/configuration/">Configuration</a>
+          <a href="/reference/threat-model/">Threat Model</a>
         </div>
         <div>
           <div class="go-footer-heading">Project</div>
           <a href="https://github.com/dnysaz/envgo" target="_blank" rel="noopener">GitHub</a>
           <a href="https://github.com/dnysaz/envgo/releases" target="_blank" rel="noopener">Releases</a>
-          <a href="/envgo-site/license/">License &amp; feedback</a>
+          <a href="/license/">License &amp; feedback</a>
         </div>
       </nav>
     </div>
