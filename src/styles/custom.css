@@ -1,0 +1,38 @@
+/* Go.dev-like header — title in hero blue */
+.site-title {
+  color: #007d9c !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em;
+}
+.site-title:hover {
+  color: #00607a !important;
+}
+
+/* Make header feel like Go.dev — subtle border like Go's header */
+.header {
+  border-bottom: 1px solid var(--sl-color-hairline-light, #e2e8f0);
+}
+
+/* Ensure hero blue is consistent when switching theme */
+:root {
+  --go-blue: #007d9c;
+  --go-blue-hover: #00607a;
+}
+
+/* Splash page: remove default content panel padding so hero can bleed */
+[data-template="splash"] .content-panel {
+  padding-top: 0 !important;
+}
+[data-template="splash"] .sl-container {
+  max-width: none !important;
+  padding-inline: 0 !important;
+}
+[data-template="splash"] .sl-markdown-content {
+  max-width: 1100px;
+  margin-inline: auto;
+  padding-inline: var(--sl-content-pad-x, 1.5rem);
+}
+/* Keep the hero itself full-bleed */
+[data-template="splash"] .go-hero {
+  padding-inline: var(--sl-content-pad-x, 1.5rem);
+}
