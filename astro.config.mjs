@@ -91,6 +91,7 @@ export default defineConfig({
             { label: 'CLI Commands', slug: 'reference/cli-commands' },
             { label: 'Configuration', slug: 'reference/configuration' },
             { label: 'Threat Model', slug: 'reference/threat-model' },
+            { label: 'Comparison', slug: 'reference/comparison' },
           ],
         },
       ],

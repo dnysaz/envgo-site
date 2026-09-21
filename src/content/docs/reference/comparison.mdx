@@ -1,0 +1,69 @@
+---
+title: Comparison
+description: What envGo does, what it does not, and how it compares to alternatives
+---
+
+envGo is intentionally narrow. This page makes the trade-offs explicit so you can decide in 2 minutes whether it fits your project.
+
+## What envGo has
+
+- **Zero-dependency single binary** — `CGO_ENABLED=0`, standard library only, `go vet`/`go test` clean. No Node, no Python, no runtime to install. Size ~2–12 MB.
+- **Static server + secure proxy** — serves your `index.html` and injects `{VAR}` server-side. The browser only sees placeholders and `window.EnvLoaded[NAME]=true`.
+- **Two modes** — Local (`/proxy` + per-process token `X-EnvGo-Token`, checked with `Host` + `Origin` + `subtle.ConstantTimeCompare`) and Public (`/api/<name>` fixed routes from `envgo.routes.json`).
+- **Per-route gateway** — `vars` allow-set, per-route `rate_limit` (fixed-window), optional bearer `auth`, `scrub_response` via `logger.Redact`.
+- **Hot-reload** — `internal/envstore` polls `.env` every 1.5 s, no restart.
+- **Dashboard (metadata only)** — `GET /__envgo_dashboard` shows variable *names* and last 200 requests, never values.
+- **Diagnostics** — `GET /__env.js` typo detection (Levenshtein ≤3) with red banner, PHP `echo getenv` warning, missing `vars` warning at startup.
+- **PHP** — executes `.php` via `php` binary with `.env` injected, 30 s timeout, header parsing.
+- **TLS** — `--tls` self-signed (TLS 1.2+), or run plain `127.0.0.1:8080` behind Caddy/nginx.
+- **Cross-platform** — `make release` builds darwin/linux/windows `amd64`+`arm64`, UPX on linux/windows.
+- **AI-friendly** — one copy-paste prompt (`/envgo-agent-prompt.txt`) that teaches any agent to `envgo -v` → auto-install → `envgo init` → `envgo run dev`.
+
+## What envGo does not have
+
+Be explicit about this before you commit:
+
+- **No database, no sessions, no user auth.** The token is per-process, not per-user. Any page on your own origin can fetch it.
+- **No auto-HTTPS.** `--tls` is self-signed for dev. Production TLS is your reverse proxy (Caddy does Let's Encrypt).
+- **No unlimited abuse protection by default.** `default_rate_limit` is empty → *unlimited* until you set `30/min` etc. Rate limiting is also per-process and needs `trust_proxy: true` behind a proxy.
+- **No streaming scrub.** SSE passthrough skips redaction to avoid buffering — an upstream that echoes a secret in a stream leaks it.
+- **No build step.** envGo serves files as-is. It does not bundle, minify, or transpile JS.
+- **No secret rotation / vault.** It reads a flat `.env` file. For Vault/AWS Secrets Manager, sync to `.env` yourself.
+- **No multi-tenant isolation.** One `.env`, one gateway config per process. For per-user keys, you need a real backend.
+
+If you need any of the above, envGo is the wrong tool — use Next.js/Nuxt API routes or a Worker.
+
+## Head-to-head
+
+| Area | **envGo** | **Vite `server.proxy` / `http-proxy-middleware`** | **Next.js / Nuxt API routes** | **Caddy / nginx** | **Cloudflare Workers / Vercel Functions** |
+|---|---|---|---|---|---|
+| **Runtime** | None — single Go binary | Node + `node_modules` | Node + framework | Caddy/nginx binary | Cloud account + `wrangler`/`vercel` |
+| **Secret stays server-side?** | Yes — `{VAR}` substituted in Go (`proxy.inject`, `gateway.inject`) | Yes, but you write the handler yourself | Yes — `process.env` on server | Yes with `header_up`/`templates`, but manual | Yes — `env.MY_SECRET` in Worker |
+| **Leak via bundle?** | No — browser gets booleans only | Risk if you use `import.meta.env` in client | Risk if you forget `NEXT_PUBLIC_` prefix | No (static files) | No |
+| **Setup** | `envgo init` → `envgo run dev` | `vite.config.js` proxy table + custom handler | `pages/api/*.ts` per endpoint | `Caddyfile`/`nginx.conf` + `sub_filter` | `wrangler.toml` + `fetch` handler |
+| **Hot-reload `.env`** | Yes (1.5 s poll) | Restart needed | Restart needed | Reload needed | Redeploy |
+| **Dashboard / history** | Yes — `/__envgo_dashboard` names only | No | No | No | Cloud logs only |
+| **Typo detection** | Yes — red banner + Levenshtein suggestion (`server/serveEnvJS`, `server/detectPHPTypo`) | No | No | No | No |
+| **Fixed public routes** | Yes — `/api/<name>` with `vars` + `rate_limit` + `auth` | Manual per-route handler | Manual per-route handler | Manual `handle /api/*` | Manual `export default { fetch }` |
+| **Rate limiting** | Per-route fixed-window, per-IP (`ratelimit.Limiter`) | You add `express-rate-limit` | You add middleware | `rate_limit` directive | KV / Durable Objects |
+| **Auth per route** | Bearer matching `{ENV_VAR}` | You code it | `next-auth` etc. | `forward_auth` | You code it |
+| **PHP** | Yes — `php` exec with `.env` env | No | No | `php_fastcgi` | No |
+| **TLS** | Self-signed (`--tls`) or proxy | Dev via `mkcert` | Vercel auto | Caddy auto Let's Encrypt | Cloud auto |
+| **Binary / deploy size** | 2–12 MB single file | `node_modules` hundreds MB | Framework + build | ~15–40 MB | Bundle < few MB |
+| **Best for** | Static HTML/vanilla JS + one API key, AI-generated sites, internal tools, no-build demos | SPA dev already on Vite | Full-stack React/Vue app | Static site behind existing Caddy/nginx | Edge, multi-region, KV/DB |
+
+## When to choose what
+
+| You are... | Pick |
+|---|---|
+| Beginner, designer, AI agent that just generated `index.html` and needs to call OpenAI without learning Node | **envGo** |
+| Already building a SPA with Vite and comfortable writing a small proxy handler | Vite proxy |
+| Building a full app with DB, auth, SSR | Next.js / Nuxt |
+| Already running Caddy/nginx in prod and want `templates` or `header_up` | Caddy/nginx |
+| Need global edge, KV, or pay-per-request | Workers / Functions |
+
+## Bottom line
+
+envGo is not a replacement for a backend. It is a **bridge for the gap between “I have a static HTML file” and “I need one secret without learning a framework.”** If that gap is your project, envGo is the shortest path. If you have already crossed that gap, stick with what you have.
+
+Further reading: [Threat Model](/reference/threat-model), [Configuration](/reference/configuration), [How It Works](/core-concepts/how-it-works).
