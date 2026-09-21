@@ -169,14 +169,18 @@ subdirectory instead.
 
 ## Step 3 — Put a real key in `.env`
 
-`envgo init` filled `.env` with placeholders. Open it and replace them:
+`envgo init` filled `.env` with placeholders (including commented `MODE_PUBLIC`/`CONFIG`). Open it and replace them:
 
 ```env title=".env"
 MY_SECRET=some-real-value
 OPENAI_API_KEY=sk-your-real-key-here
 HOST=127.0.0.1
 PORT=8080
+# MODE_PUBLIC=false   # true/public = public mode (needs envgo.routes.json)
+# CONFIG=envgo.routes.json  # explicit path, overrides MODE_PUBLIC
 ```
+
+Uncomment `MODE_PUBLIC=true` to switch to public mode without flags. See [CLI Commands](/reference/cli-commands#host-port-and-mode_public-from-env).
 
 ### `HOST` and `PORT` are different from the others
 
@@ -316,13 +320,14 @@ This is a complete, working example. Every name and endpoint below is
 illustrative — adapt it to your API.
 
 It takes two files that have to agree with each other. Here is the `.env` again
-so you can see the pairing — it is the same file you edited in Step 3:
+so you can see the pairing — it is the same file you edited in Step 3 (plus optional commented mode lines):
 
 ```env title=".env"
 MY_SECRET=some-real-value
 OPENAI_API_KEY=sk-your-real-key-here
 HOST=127.0.0.1
 PORT=8080
+# MODE_PUBLIC=false
 ```
 
 The two files must line up in three places:

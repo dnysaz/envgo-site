@@ -192,7 +192,7 @@ Running `envgo init` writes five files into the target directory:
 
 | File | Contents |
 |------|----------|
-| `.env` | `MY_SECRET=change-me`, `HOST=127.0.0.1`, `PORT=8080`, `MODE_PUBLIC=false`, `CONFIG=envgo.routes.json` (mode `0600`) |
+| `.env` | `MY_SECRET=change-me`, `HOST=127.0.0.1`, `PORT=8080`, `# MODE_PUBLIC=false`, `# CONFIG=envgo.routes.json` (mode `0600`, commented by default) |
 | `.env.example` | The same placeholder content |
 | `index.html` | Minimal page with `<div id="MY_SECRET"></div>` and `/__env.js` |
 | `.gitignore` | Ignores `.env`, `*.key`, `*.secret` |
