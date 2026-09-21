@@ -36,3 +36,52 @@
 [data-template="splash"] .go-hero {
   padding-inline: var(--sl-content-pad-x, 1.5rem);
 }
+
+/* Head-to-head comparison table: horizontal scroll on narrow viewports */
+.sl-markdown-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-collapse: collapse;
+}
+.sl-markdown-content table thead,
+.sl-markdown-content table tbody {
+  min-width: 900px;
+}
+.sl-markdown-content th,
+.sl-markdown-content td {
+  white-space: nowrap;
+  padding: 0.6rem 0.85rem;
+  vertical-align: top;
+}
+.sl-markdown-content th {
+  position: sticky;
+  top: 0;
+  background: var(--sl-color-bg, white);
+  z-index: 1;
+}
+/* Scrollbar hint */
+.sl-markdown-content table::-webkit-scrollbar {
+  height: 6px;
+}
+.sl-markdown-content table::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+:global([data-theme="dark"]) .sl-markdown-content table::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+/* Wrapper for comparison page specifically */
+.table-scroll-hint {
+  font-size: 0.78rem;
+  color: var(--sl-color-gray-3);
+  margin: -0.4rem 0 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.table-scroll-hint::before {
+  content: "↔";
+  font-size: 0.9rem;
+}
