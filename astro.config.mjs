@@ -67,6 +67,7 @@ export default defineConfig({
       components: {
         Hero: './src/components/Hero.astro',
         Footer: './src/components/Footer.astro',
+        SiteTitle: './src/components/SiteTitle.astro',
       },
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/dnysaz/envgo' }],
       editLink: { baseUrl: 'https://github.com/dnysaz/envgo-site/edit/main/' },
