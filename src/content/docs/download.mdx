@@ -56,14 +56,48 @@ The ZIP contains the binary plus an installer script:
 2. Double-click `Install_envGo.command` — it installs to `~/.local/bin/envgo`
 3. Open a new terminal and run `envgo -v`
 
-If Gatekeeper refuses to open the script, right-click it and choose **Open**, or
-clear the quarantine flag:
+#### macOS Gatekeeper — “Apple could not verify…”
 
+The ZIP and `Install_envGo.command` are not Apple-notarized (no paid Apple Developer account), so Gatekeeper shows:
+
+> **“Apple could not verify ‘Install_envGo.command’ is free of malware…”**
+
+This is expected for unsigned open-source binaries. Pick one fix:
+
+**A. Right-click Open (fastest):**
+1. Right-click `Install_envGo.command` → **Open** → **Open** again.
+2. Same for the binary if blocked: Right-click `dist/envgo-darwin-arm64` → **Open**.
+
+**B. System Settings → Open Anyway:**
+1. Double-click → `Done` on the warning.
+2. **System Settings → Privacy & Security** → scroll to *Security* → click **Open Anyway** next to `Install_envGo.command was blocked…` → **Open**.
+
+**C. Terminal — remove quarantine (avoids Gatekeeper entirely):**
 ```bash
+# For the extracted folder
 xattr -dr com.apple.quarantine envGo-macOS-AppleSilicon
+# Or for the whole ZIP before extracting via Finder
+xattr -d com.apple.quarantine ~/Downloads/envGo-macOS-AppleSilicon.zip
+```
+Tip: Extracting with `unzip` in Terminal instead of double-clicking the ZIP in Finder does not add quarantine at all.
+
+**D. Manual install (no script, no warning):**
+```bash
+mkdir -p ~/.local/bin
+cp envGo-macOS-AppleSilicon/dist/envgo-darwin-arm64 ~/.local/bin/envgo
+chmod +x ~/.local/bin/envgo
+# add to PATH if needed
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+envgo -v
 ```
 
-Manual equivalent:
+If you see `envgo cannot be opened because the developer cannot be verified` for the binary itself, apply the same Right-click → Open or `xattr -dr` to `~/.local/bin/envgo`.
+
+:::note[Why not notarized?]
+Notarization requires a paid Apple Developer Program membership and an upload to Apple on every release. envGo is MIT, no telemetry, and built with `CGO_ENABLED=0` — you can verify via `SHA256SUMS` and `shasum -a 256 -c SHA256SUMS` instead, or `go build` from source (`git clone … && make build`).
+:::
+
+Manual equivalent (same as D):
 
 ```bash
 mkdir -p ~/.local/bin
