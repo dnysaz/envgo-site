@@ -30,12 +30,9 @@ const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
 	<span class:list={{ 'sr-only': config.logo?.replacesTitle }} translate="no">
 		{siteTitle}
 	</span>
-	<span class="version-badge" aria-label="Latest release">
-		<span class="version-label">Latest</span>
-		<a href="https://github.com/dnysaz/envgo/releases/latest" target="_blank" rel="noopener" class="version-value">
-			<img src="https://img.shields.io/github/v/release/dnysaz/envgo?label=%20&style=flat-square&color=007d9c" alt="Latest version" width="60" height="20" loading="eager" />
-		</a>
-	</span>
+	<a href="https://github.com/dnysaz/envgo/releases/latest" target="_blank" rel="noopener" class="version-badge" aria-label="Latest release">
+		<img src="https://img.shields.io/github/v/release/dnysaz/envgo?style=flat-square&label=&color=007d9c" alt="Latest version" width="55" height="20" loading="eager" />
+	</a>
 </a>
 
 <style>
@@ -59,31 +56,9 @@ const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
 		display: inline-flex;
 		align-items: center;
 		margin-left: 0.5rem;
-		font-size: 0.72rem;
 		line-height: 1;
-		border-radius: 6px;
-		overflow: hidden;
-		border: 1px solid var(--sl-color-gray-5);
-		background: var(--sl-color-bg-nav);
 	}
-	.version-label {
-		padding: 0.22rem 0.45rem;
-		background: var(--sl-color-gray-6);
-		color: var(--sl-color-white);
-		font-weight: 600;
-		letter-spacing: 0.02em;
-	}
-	:global([data-theme="light"]) .version-label {
-		background: #e2e8f0;
-		color: #334155;
-	}
-	.version-value {
-		display: inline-flex;
-		align-items: center;
-		padding: 0 0.1rem;
-		background: #007d9c;
-	}
-	.version-value img {
+	.version-badge img {
 		display: block;
 		height: 20px;
 		width: auto;
