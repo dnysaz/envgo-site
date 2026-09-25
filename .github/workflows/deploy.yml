@@ -30,6 +30,8 @@ jobs:
         uses: withastro/action@v3
         with:
           node-version: 20
+          build: npm run build
+          dist-dir: ./dist
 
   deploy:
     name: Deploy
