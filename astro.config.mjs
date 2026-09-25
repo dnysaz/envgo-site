@@ -1,8 +1,6 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
-// Custom domain: envgo.dev serves from root, so BASE is "/".
-// Keep remarkPrefixBase portable: it no-ops when BASE is "/".
 const BASE = '/';
 
 function remarkPrefixBase() {
