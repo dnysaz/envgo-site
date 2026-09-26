@@ -150,6 +150,74 @@ envgo -v     # envGo {APP_VERSION}
 envgo -h     # full flag reference
 ```
 
+## Update envGo
+
+envGo can update itself in place with:
+
+```bash
+envgo run update
+```
+
+It works the same on **macOS, Linux and Windows**. The flow:
+
+1. Prints `Update envgo to latest version? Y/n` and waits for confirmation.
+   Accept with `y`, `yes`, or just press Enter (default yes).
+2. Queries `https://api.github.com/repos/dnysaz/envgo/releases/latest` for the
+   newest release.
+3. Downloads the matching single binary for your platform —
+   `envgo-darwin-arm64`, `envgo-darwin-amd64`, `envgo-linux-amd64`,
+   `envgo-linux-arm64`, `envgo-windows-amd64.exe`, `envgo-windows-arm64.exe` —
+   over HTTPS.
+4. Verifies it against the release's `SHA256SUMS` (when present), then runs a
+   startup self-check (`envgo -h`).
+5. Replaces the running `envgo` binary in place and prints
+   `Congrats to new version of envgo!`.
+
+```bash
+envgo run update        # prompts; accept with y
+```
+
+`envgo run update` never starts a server — it is a short-lived command. On
+macOS/Linux the replacement is an atomic rename, so a *currently running* dev
+server keeps the old in-memory binary until you restart it; the next
+`envgo run dev` then uses the new version. On Windows an in-use `.exe` cannot be
+replaced directly, so the move is scheduled to run after the current process
+exits — restart to pick up the new binary.
+
+The downloader sets a `User-Agent` of `envgo/{VERSION}` and honors
+`HTTP_PROXY`/`HTTPS_PROXY` from your environment, so it works behind corporate
+proxies:
+
+```bash
+HTTPS_PROXY=http://proxy.local:3128 envgo run update
+```
+
+### See what would change (no download)
+
+To check the latest version without downloading, compare the printed `current`
+and `Latest` lines, or query the releases page directly:
+
+```bash
+envgo -v   # current
+# latest: https://github.com/dnysaz/envgo/releases/latest
+```
+
+### Offline / manual update
+
+If the machine running `envgo` has no internet access, download the archive or
+binary from the [releases page](https://github.com/dnysaz/envgo/releases) on
+another machine, copy it over the old binary in the platform install path (see
+above), `chmod +x` it (macOS/Linux), and verify first:
+
+```bash
+# macOS
+shasum -a 256 -c SHA256SUMS
+# Linux
+sha256sum -c SHA256SUMS
+# Windows PowerShell
+Get-FileHash .\envgo-windows-amd64.exe -Algorithm SHA256
+```
+
 ## Next step
 
 ```bash
