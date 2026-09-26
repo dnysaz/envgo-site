@@ -106,39 +106,66 @@ uname -m      # x86_64 → amd64, aarch64 → arm64
 
 ## Windows
 
-The simplest way is the PowerShell installer script — it verifies the checksum, installs the binary, and adds itself to your user `PATH` automatically:
+The `.exe` is a console application — do **not** start it by double-clicking,
+because the console window closes the instant the process exits. Open a terminal
+and use `envgo run dev` instead.
+
+#### Option 1 — PowerShell installer (recommended)
+
+The installer detects AMD64/ARM64, verifies the SHA-256 entry in `SHA256SUMS`,
+installs the binary to `%LOCALAPPDATA%\Programs\envGo`, and adds that directory
+to your user `PATH` — all without admin rights.
 
 ```powershell
-powershell -NoProfile -File .\Install_envGo.ps1
+# On default Windows the "Restricted" policy blocks scripts and you will see
+# "cannot be loaded because running scripts is disabled". The
+# -ExecutionPolicy Bypass flag fixes that for this one run only:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Install_envGo.ps1 -Architecture amd64
 ```
 
-Or do it manually:
+> Verify the installer and binary against `SHA256SUMS` before running them.
+> SmartScreen may warn on first run because the binary is not code-signed —
+> choose **More info → Run anyway**.
+
+#### Option 2 — Manual install
 
 ```powershell
-# Copy either
-#   dist\envgo-windows-amd64.exe
-#   dist\envgo-windows-arm64.exe
-
+# 1. Place the binary (pick the one matching your CPU — most PCs use amd64):
+#    dist\envgo-windows-amd64.exe   ->   AMD64 (Intel/AMD)
+#    dist\envgo-windows-arm64.exe   ->   ARM64 (Surface Pro X, etc.)
 mkdir C:\envgo
 copy $env:USERPROFILE\Downloads\envgo-windows-amd64.exe C:\envgo\envgo.exe
-
-# Add to your user PATH (no admin rights needed)
-[Environment]::SetEnvironmentVariable(
-  "Path",
-  [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\envgo",
-  "User"
-)
-$env:Path = "$env:USERPROFILE\C:\envgo;$env:Path"
 ```
+
+Then add `C:\envgo` to your `PATH`. Use **either** method below.
+
+**Method A — PowerShell (no admin rights):**
+
+```powershell
+# Run once in a new PowerShell window:
+[Environment]::SetEnvironmentVariable(
+  'Path',
+  [Environment]::GetEnvironmentVariable('Path', 'User') + ';C:\envgo',
+  'User'
+)
+```
+
+**Method B — Windows GUI (visual):**
+
+1. Press **Win + R**, type `sysdm.cpl`, press **Enter**.
+2. **Advanced** tab → **Environment Variables…**.
+3. Under **User variables** select **Path** → **Edit…**.
+4. **New** → type `C:\envgo` → **OK** to close every dialog.
+5. Open a **new** PowerShell window.
+
+> PATH changes only apply to terminals opened **after** the edit. Reopen the
+> terminal if `envgo` is not recognized.
 
 Open a **new** terminal, then verify:
 
 ```bash
 envgo -v
 ```
-
-SmartScreen may warn on first run because the binary is not code-signed —
-choose **More info → Run anyway**.
 
 ## Building from source
 
@@ -228,6 +255,7 @@ rm -f ~/.local/bin/envbridge
 | Gatekeeper blocks the binary | Right-click → Open, or `xattr -dr com.apple.quarantine <folder>` |
 | SmartScreen blocks the binary | Choose **More info → Run anyway** |
 | `cannot execute binary file` on Linux | Wrong architecture, or the file was transferred as text — re-copy it |
+| `cannot be loaded because running scripts is disabled` on Windows | Run the installer with `powershell -NoProfile -ExecutionPolicy Bypass -File .\Install_envGo.ps1` — `Restricted` (default) blocks all scripts |
 
 ## Next steps
 

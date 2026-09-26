@@ -124,24 +124,45 @@ chmod +x ~/.local/bin/envgo
 
 ### Windows
 
+The `.exe` is a console application — do **not** start it by double-clicking,
+because the window closes the instant the process exits. Use a terminal instead.
+
+Pick the archive matching your CPU (most PCs use **amd64**):
+
+```text
+envgo-windows-amd64.exe   ->   AMD64 (Intel/AMD, most PCs)
+envgo-windows-arm64.exe   ->   ARM64 (Surface Pro X, etc.)
+```
+
 ```powershell
 mkdir C:\envgo
 copy envgo-windows-amd64.exe C:\envgo\envgo.exe
 ```
 
-Then add `C:\envgo` to your `PATH` through **System Properties → Environment
-Variables**, or:
+Then add `C:\envgo` to your `PATH`. Use **either** method:
+
+**Method A — PowerShell (no admin rights):**
 
 ```powershell
 [Environment]::SetEnvironmentVariable(
-  "Path",
-  [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\envgo",
-  "User"
+  'Path',
+  [Environment]::GetEnvironmentVariable('Path', 'User') + ';C:\envgo',
+  'User'
 )
 ```
 
-Open a new terminal afterwards. SmartScreen may warn on first run because the
-binary is not code-signed — choose **More info → Run anyway**.
+**Method B — Windows GUI (visual):**
+
+1. **Win + R** → `sysdm.cpl` → **Enter**.
+2. **Advanced** tab → **Environment Variables…**.
+3. **User variables** → **Path** → **Edit…** → **New** → type `C:\envgo` → **OK**.
+
+Open a **new** terminal afterwards — changes do not apply to already-open shells.
+SmartScreen may warn on first run because the binary is not code-signed —
+choose **More info → Run anyway**. For the PowerShell *installer* script, use
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\Install_envGo.ps1` to
+bypass the default "running scripts is disabled" policy. See the full
+[installation guide](./getting-started/installation.mdx) for details.
 
 ## Verify the install
 
