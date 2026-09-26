@@ -106,17 +106,39 @@ uname -m      # x86_64 → amd64, aarch64 → arm64
 
 ## Windows
 
+The simplest way is the PowerShell installer script — it verifies the checksum, installs the binary, and adds itself to your user `PATH` automatically:
+
+```powershell
+powershell -NoProfile -File .\Install_envGo.ps1
+```
+
+Or do it manually:
+
 ```powershell
 # Copy either
 #   dist\envgo-windows-amd64.exe
 #   dist\envgo-windows-arm64.exe
 
 mkdir C:\envgo
-copy dist\envgo-windows-amd64.exe C:\envgo\envgo.exe
+copy $env:USERPROFILE\Downloads\envgo-windows-amd64.exe C:\envgo\envgo.exe
+
+# Add to your user PATH (no admin rights needed)
+[Environment]::SetEnvironmentVariable(
+  "Path",
+  [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\envgo",
+  "User"
+)
+$env:Path = "$env:USERPROFILE\C:\envgo;$env:Path"
 ```
 
-Then add `C:\envgo` to your `PATH` via **System Properties → Environment
-Variables**, and open a new terminal so the change takes effect.
+Open a **new** terminal, then verify:
+
+```bash
+envgo -v
+```
+
+SmartScreen may warn on first run because the binary is not code-signed —
+choose **More info → Run anyway**.
 
 ## Building from source
 
@@ -204,6 +226,7 @@ rm -f ~/.local/bin/envbridge
 | `bad CPU type in executable` | Wrong architecture. Check `uname -m` and install the matching binary |
 | `Permission denied` | `chmod +x` the binary, or install to a user-writable directory |
 | Gatekeeper blocks the binary | Right-click → Open, or `xattr -dr com.apple.quarantine <folder>` |
+| SmartScreen blocks the binary | Choose **More info → Run anyway** |
 | `cannot execute binary file` on Linux | Wrong architecture, or the file was transferred as text — re-copy it |
 
 ## Next steps
