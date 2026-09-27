@@ -7,11 +7,22 @@ Local mode is what you get when you run envGo **without** `--config`. It serves
 your static files and exposes a token-guarded `/proxy` endpoint that can reach any
 host you allowlist. It is designed for development and single-user use.
 
+By default it binds `127.0.0.1`, so nothing on your network can reach it. The one
+exception is [`--qr`](/guides/sharing-with-your-phone), which deliberately opens
+it to your local network so a phone can load the site.
+
+:::tip[A bare `envgo` prints help]
+Running `envgo` with no arguments shows the help text instead of starting a
+server. Name what you want: `envgo run dev`, or pass at least one flag such as
+`envgo -e .env`.
+:::
+
 ## When to use it
 
 - Local development and testing API integrations
 - Personal projects on your own machine
 - Prototyping where you do not want to define routes up front
+- Previewing on a phone or tablet, with `envgo run dev --qr`
 
 For anything reachable by other people, use
 [Public Mode](/modes/public-mode) instead — the browser should not be choosing
@@ -155,6 +166,32 @@ envgo run dev -a api.openai.com
 # → http://127.0.0.1:8080/
 ```
 
+## Opening it on your phone
+
+Local mode binds `127.0.0.1`, so your phone cannot reach it. Add `--qr` to bind
+your network interface and print a scannable code:
+
+```bash
+envgo run dev --qr
+```
+
+```text
+[envGo] --qr: binding all interfaces so other devices on this network can connect
+[envGo] envGo running -> http://127.0.0.1:8080/
+[envGo] envGo network -> http://192.168.1.20:8080   (same network only)
+```
+
+The QR always encodes the `192.168.x.x` address — `127.0.0.1` would be useless
+on a phone. The port is unchanged, and `run dev` is optional.
+
+The security guards below still apply on the LAN: the session token, `Origin`,
+and `Host` checks are unchanged, and secrets are still never sent to the browser.
+What `--qr` does change is that your **static files** become readable by any
+device on the same network.
+
+Full walkthrough, including firewall and multi-interface issues:
+[Sharing with your phone](/guides/sharing-with-your-phone).
+
 ## Security in local mode
 
 ### Session token
@@ -168,7 +205,7 @@ Generated with `crypto/rand`, 256 bits, once per process. Required on every
 envgo --allow api.openai.com,httpbin.org
 
 # Without --allow the proxy is REFUSED entirely
-envgo   # proxy disabled, warning printed at startup
+envgo run dev   # proxy disabled, warning printed at startup
 ```
 
 ### Host header validation
@@ -342,10 +379,13 @@ Booleans only — the values themselves never reach the browser.
 2. **Use `-b`** to open the browser automatically while developing
 3. **Put flags after the subcommand** (`envgo run dev --debug`)
 4. **Fetch a fresh token** instead of persisting it
-5. **Do not expose local mode** to a network — use public mode behind a proxy
+5. **Treat `--qr` as temporary** — it exposes static files to your whole network,
+   so stop the server when you are done. For permanent internet-facing access,
+   use public mode behind a real reverse proxy.
 
 ## Next steps
 
+- [Sharing with your phone](/guides/sharing-with-your-phone) — `--qr` and LAN access in detail
 - [Public Mode](/modes/public-mode) — the production gateway
 - [Configuration](/reference/configuration) — routes JSON reference
 - [Deploy to VPS](/guides/deploy-to-vps) — shipping to a server

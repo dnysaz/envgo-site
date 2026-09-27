@@ -211,6 +211,27 @@ envgo --tls
 The certificate is generated fresh on each start and never written to disk. For
 anything public, terminate TLS at Caddy or nginx instead.
 
+## Network boundary
+
+By default envGo binds `127.0.0.1`, which means no other device on your network
+can open the site at all. That is a security boundary, not just a convenience.
+
+```bash
+envgo run dev                 # binds 127.0.0.1 — this machine only
+envgo run dev --qr            # binds 0.0.0.0 — every device on the same Wi-Fi
+```
+
+`--qr` is the single flag that widens it, and it is intended for previewing on
+your own phone. The `/proxy` guards, the session token, and the rule that secret
+*values* never reach the browser are all unchanged on the LAN. What changes is
+that your static files become readable by anyone on that network, and the
+dashboard's variable **names** with them.
+
+Treat `--qr` as public-facing for the files it serves: use it on a network you
+trust, and stop the server when you are done. For anything meant to stay
+reachable by other people, use [Public Mode](/modes/public-mode) behind a real
+reverse proxy.
+
 ## What envGo does not do
 
 | Not provided | Why it matters |
@@ -224,6 +245,7 @@ anything public, terminate TLS at Caddy or nginx instead.
 
 ## Next steps
 
+- [Sharing with your phone](/guides/sharing-with-your-phone) — what `--qr` changes about exposure
 - [Threat Model](/reference/threat-model) — the full threat/mitigation table
 - [Configuration](/reference/configuration) — `trust_proxy`, `scrub_response`, rate limits
 - [TLS / HTTPS](/guides/tls-https) — production TLS setup

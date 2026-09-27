@@ -17,7 +17,7 @@ the exact mechanism used, and — just as importantly — the limits of each def
 | SSRF via arbitrary targets | Proxy is disabled when `--allow` is empty; otherwise only allowlisted hosts | `proxy.validateTarget` |
 | Abuse of fixed routes | Per-route `vars` allow-set, per-route rate limit, optional bearer auth | `gateway.inject`, `ratelimit.Limiter` |
 | Upstream secret leak | `scrub_response` redacts known secret values from responses | `logger.Redact` |
-| LAN / network exposure | Defaults to binding `127.0.0.1` only | `main.go` |
+| LAN / network exposure | Defaults to binding `127.0.0.1` only; `--qr` is the one opt-in that widens it to `0.0.0.0` | `main.go` |
 | TLS downgrade | `MinVersion` is TLS 1.2 when using `--tls` | `main.go` |
 | PHP code execution | 30-second execution timeout per request | `server.servePHP` |
 | Accidental secret logging | Every log line passes through a redacting logger | `logger.Logger.Redact` |
@@ -64,9 +64,16 @@ first so overlapping secrets are handled deterministically.
 
 Be aware of these before trusting envGo with a high-value secret:
 
+- **`--qr` deliberately widens the default exposure.** Without it envGo binds
+  `127.0.0.1` and nothing on the network can reach it. `--qr` binds `0.0.0.0`
+  instead, so any device on the same Wi-Fi can load your static files and read
+  variable **names** from the dashboard. The `/proxy` guards above still apply,
+  and secret *values* are still never sent to the browser — but treat `--qr` as
+  public-facing for the files it serves, and do not use it on an untrusted
+  network. See [Sharing with your phone](/guides/sharing-with-your-phone).
 - **Streaming responses are not scrubbed.** SSE/streaming passthrough skips
-  redaction entirely to avoid buffering. See
-  [Configuration](/reference/configuration#response-scrubbing).
+    redaction entirely to avoid buffering. See
+    [Configuration](/reference/configuration#response-scrubbing).
 - **The dashboard exposes variable names.** Variable *names* and request
   metadata are readable by anyone who can reach the dashboard. It is enabled by
   default in local mode and opt-in in public mode. Do not enable it on a
@@ -96,7 +103,7 @@ Be aware of these before trusting envGo with a high-value secret:
 - [ ] `--allow` is set (local mode) or every route uses an explicit `vars` allow-set
 - [ ] `default_rate_limit` or per-route `rate_limit` is set — empty means unlimited
 - [ ] Running behind Caddy/nginx for TLS termination
-- [ ] envGo bound to `127.0.0.1`, not `0.0.0.0`
+- [ ] envGo bound to `127.0.0.1`, not `0.0.0.0` — and `--qr` **not** passed
 - [ ] `trust_proxy: true` set **only** when actually behind a proxy you control
 - [ ] Dashboard disabled (no `--dashboard`) in public mode
 - [ ] `scrub_response` enabled if upstreams might echo secrets

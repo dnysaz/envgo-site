@@ -110,6 +110,7 @@ export default defineConfig({
         {
           label: 'Guides',
           items: [
+            { label: 'Sharing with your phone', slug: 'guides/sharing-with-your-phone' },
             { label: 'Deploy to VPS', slug: 'guides/deploy-to-vps' },
             { label: 'TLS / HTTPS', slug: 'guides/tls-https' },
             { label: 'PHP Support', slug: 'guides/php-support' },

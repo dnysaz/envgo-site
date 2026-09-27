@@ -78,7 +78,7 @@ you reach the server.
 
 | Key | Value shown | What changing it does |
 |-----|-------------|-----------------------|
-| `HOST` | `127.0.0.1` | Interface to bind. `127.0.0.1` accepts connections from this machine only. `0.0.0.0` also accepts other devices on your network |
+| `HOST` | `127.0.0.1` | Interface to bind. `127.0.0.1` accepts connections from this machine only. `0.0.0.0` also accepts other devices on your network — or just add `--qr`, which sets this for you |
 | `PORT` | `8080` | Port to listen on, and the port the browser opens. Setting `PORT=3000` means you get `http://127.0.0.1:3000/` |
 
 Change the port and run it again to see it take effect:
@@ -101,15 +101,16 @@ picked up.
 
 Three rules apply:
 
-- They are read **only** by `envgo run` and `envgo run dev`. Plain `envgo` and
-  public mode (`--config …`) ignore them completely.
+- They are read **only** by `envgo run` and `envgo run dev`. Public mode
+  (`--config …`) ignores them completely, and a bare `envgo` never starts a
+  server at all — it just prints help.
 - A command-line flag wins over the file. `envgo run dev --port 4000` uses 4000
   and ignores `PORT` in `.env`.
 - Lowercase keys work too (`host`, `port`), and a leading colon is stripped, so
   `PORT=:3000` is also valid.
 
 Full details are in
-[CLI Commands](/reference/cli-commands#host-and-port-from-env).
+[CLI Commands](/reference/cli-commands#host-port-and-mode_public-from-env).
 
 ### Open the file
 
@@ -168,6 +169,26 @@ Watch the startup output — it tells you what loaded:
 
 If the port is taken, envGo automatically tries the next one up (up to 20
 attempts), so check the printed address.
+
+### Try it on your phone
+
+Add `--qr` and envGo opens your network interface and prints a QR code you can
+scan:
+
+```bash
+envgo run dev --qr
+```
+
+```text
+[envGo] --qr: binding all interfaces so other devices on this network can connect
+[envGo] envGo running -> http://127.0.0.1:8080/
+[envGo] envGo network -> http://192.168.1.20:8080   (same network only)
+```
+
+Scan the code with your phone camera and the site opens. The phone must be on the
+same Wi-Fi. If it scans but will not load, the port is probably blocked by the
+host firewall. Full details and troubleshooting:
+[Sharing with your phone](/guides/sharing-with-your-phone).
 
 ## Step 4 — Check which keys are visible
 

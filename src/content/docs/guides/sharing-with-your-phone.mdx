@@ -1,0 +1,183 @@
+---
+title: Sharing with your phone
+description: Open your local envGo site on a phone or tablet with a scannable QR code
+---
+
+The fastest way to see a local envGo site on your phone is `--qr`. It binds every
+network interface and prints a QR code that encodes the LAN address, so you scan
+it with the phone camera and the site opens — no typing an IP address, no
+`adb reverse`, no deploy.
+
+```bash
+envgo run dev --qr
+```
+
+```text
+[envGo] --qr: binding all interfaces so other devices on this network can connect
+[envGo] envGo running -> http://127.0.0.1:8080/
+[envGo] envGo network -> http://192.168.1.20:8080   (same network only)
+
+  █─────█ ─│  ─█│─  █─────█
+  █ ███ █ ││─ ─│─█─ █ ███ █
+  █ ─── █ ██│─  ──│ █ ─── █
+  ─────── █ █│█ ─│█ ───────
+  ─   ─ ─█────█│─│─█─███ │─
+  ─│█── ──│─█── │──█│─│─█│
+  █│█─────█││─█│─█  ─││──█─
+    │──█──│ │██─│██│█─ ██│
+  ── ─ ───█ █││ ─██───█─█
+  █─────█ ─ ██── │█ ─ ██│││
+  █ ███ █ ───█│ ─ █─█──│█││
+  █ ─── █  █ █─   ─│─││││█
+  ─────── ─ ─   ─  ──   ───
+  Scan with a phone on the same network to open: http://192.168.1.20:8080
+```
+
+## What `--qr` actually does
+
+It changes exactly one thing about the server, then prints a code:
+
+1. **Binds all interfaces** instead of only `127.0.0.1`.
+2. **Prints both URLs** — `local` for your own machine, `network` for the phone.
+3. **Prints a QR code** encoding the `network` URL.
+
+That is all. Nothing is uploaded, no tunnel is opened, and no external service is
+contacted — the QR is drawn by a QR encoder built into the binary.
+
+| | Without `--qr` | With `--qr` |
+|---|---|---|
+| Bound address | `127.0.0.1` | `0.0.0.0` |
+| Reachable from a phone | No | Yes, same network |
+| QR code | none | LAN URL |
+| Port | unchanged | unchanged |
+
+The port is always whatever `.env` or `--port` resolved to. `--qr` only swaps the
+host, so `PORT=3000` in `.env` still means the QR points at port 3000.
+
+:::caution[Anyone on your network can reach it]
+`--qr` turns a loopback-only server into one reachable by every device on the
+same Wi-Fi. The session token, `Origin`, and `Host` checks still apply, so the
+`/proxy` endpoint is not wide open — but your **static files** are.
+
+This is fine for a café or a home network. Stop the server when you are done,
+and do not use `--qr` on an untrusted or public network. For anything meant to
+be reachable by other people, use [Public Mode](/modes/public-mode) behind a
+real reverse proxy instead.
+:::
+
+## Requirements
+
+Your phone and your computer must be on the **same network**. Guest Wi-Fi and
+some corporate networks isolate clients from each other, and a phone on mobile
+data is a different network entirely.
+
+If the scan works but the page will not load, the port is almost certainly being
+blocked by the host firewall. See [Troubleshooting](#troubleshooting) below.
+
+## When your terminal mangles the QR
+
+The terminal version uses Unicode block characters. Some terminals render them
+as noise, and CI logs or SSH sessions often drop them entirely. Write a PNG
+instead:
+
+```bash
+envgo run dev --qr --qr-format png
+```
+
+```text
+[envGo] QR code for http://192.168.1.20:8080 written to qrcode_192.168.1.20_8080.png
+```
+
+The file lands in the current directory as `qrcode_<ip>_<port>.png`. Open it on
+your computer, or AirDrop / message it to the phone.
+
+Only the literal value `png` (in any case) writes a file. Any other value —
+including a typo like `--qr-format image` — falls back to printing in the
+terminal, so check for a silent fallback if the file never appears.
+
+## Using `--qr` without dev mode
+
+`run dev` is not required. `--qr` is an ordinary flag, so this works too:
+
+```bash
+envgo -e .env --qr
+```
+
+The only difference is that `run dev` implies `--browser`, so your own browser
+opens as well. If you use `--qr`, you probably want to skip the local browser —
+`--qr` is aimed at the phone.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Phone scans but page never loads | Host firewall blocking the port | Allow the port for incoming connections, or try a different port |
+| Page loads but `ERR_CONNECTION_REFUSED` | Phone is on a different network | Join the same Wi-Fi; disable mobile data while testing |
+| QR is unreadable blocks in the terminal | Terminal cannot render block characters | Use `--qr-format png` |
+| Wrong IP in the QR | Machine has several interfaces (VPN, Docker, virtual networks) | See [Choosing which address is advertised](#choosing-which-address-is-advertised) |
+| Works on one device, not another | Guest-network client isolation | Use a non-guest network |
+| Nothing printed at all | Server failed to start | Read the lines above the QR — usually a bad `--dir` or a port already in use |
+
+### Choosing which address is advertised
+
+When several interfaces are up — a VPN, Docker Desktop, a virtual machine — envGo
+picks the **first** one that is up, not a loopback, and carries a usable IPv4
+address. Addresses that cannot work are skipped: loopback (`127.0.0.1`),
+link-local (`169.254.x.x`), multicast, and anything that is not global unicast.
+There is no preference for private ranges over other addresses, and virtual
+adapters are not recognised as such.
+
+In practice this means the common case — one Wi-Fi adapter, no VPN — resolves
+correctly, but on a machine with a virtual network listed first the QR can point
+at an address your phone cannot reach.
+
+If the QR points at the wrong address, the reliable fixes are, in order:
+
+1. Turn the VPN off while you test, or disconnect the virtual adapter.
+2. Pin the address yourself with `HOST` in `.env`, or `--host`:
+
+   ```env title=".env"
+   HOST=192.168.1.20
+   ```
+
+   ```bash
+   envgo run dev --qr
+   ```
+
+   A specific address is left untouched by `--qr`, and the QR encodes exactly
+   what you pinned.
+3. Read the `network ->` line printed at startup to see which address was
+   actually chosen.
+
+You can confirm what the machine sees with `ipconfig getifaddr en0` (macOS) or
+`hostname -I` (Linux).
+
+### Changing the port
+
+`--qr` never changes the port. Set it the normal way, and the QR follows:
+
+```bash
+envgo run dev --qr -p 3000
+# QR encodes http://192.168.1.20:3000
+```
+
+If port 3000 is blocked but 8080 is not (or the reverse), switching ports is the
+fastest fix for a stubborn firewall.
+
+## Safety notes
+
+- **Secrets still never reach the phone browser.** Variable *values* are
+  substituted inside the Go process; the page receives names and booleans only.
+  This holds on LAN exactly as it does on loopback.
+- **The QR encodes a plain `http://` URL.** A phone will show a "not secure"
+  hint. That is expected for LAN development. If you need HTTPS, see
+  [TLS / HTTPS](/guides/tls-https) — though a self-signed certificate usually
+  has to be accepted manually on the phone.
+- **The port is temporary.** `--qr` lasts exactly as long as the running process.
+  Restarting envGo prints a fresh code.
+
+## Next steps
+
+- [CLI Commands](/reference/cli-commands) — every command and flag
+- [Local Mode](/modes/local-mode) — how `/proxy` and the session token work
+- [TLS / HTTPS](/guides/tls-https) — serving HTTPS locally

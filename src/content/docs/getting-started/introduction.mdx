@@ -20,6 +20,8 @@ browser — not in the DOM, not in the Network tab, not in memory.
 | Proxy API calls with a session token | `/proxy` in local mode |
 | Expose fixed, named API routes | `/api/<name>` in public mode |
 | Hot-reload `.env` without restarting | mtime polling, ~1.5 s |
+| Show the site on a phone, no typing | `--qr` prints a scannable LAN QR code |
+| Share to a phone when the terminal mangles blocks | `--qr --qr-format png` writes a file |
 | Throttle abusive clients | Per-route, per-IP rate limiting |
 | Require a client token on a route | Optional bearer auth per route |
 | Redact secrets from responses and logs | `scrub_response` plus a redacting logger |
@@ -125,7 +127,8 @@ details.
   copy the file and run it.
 - **Cross-platform from one codebase.** macOS, Linux, and Windows, amd64 and arm64.
 - **Standard library only.** HTTP server, JSON, crypto, regex. There are no
-  third-party dependencies in `go.mod`.
+  third-party dependencies in `go.mod`. The `--qr` code is a QR encoder written
+  in-tree, which is why `go.mod` stays empty.
 - **Predictable concurrency.** `net/http` handles requests per connection, with
   mutexes guarding the shared state that matters.
 
@@ -133,9 +136,12 @@ details.
 
 ```text
 main.go                  CLI entry point: flags, subcommands, TLS, bootstrap
+cache.go                 dev-server hard-reload broadcast (envgo cache clear)
+update.go                self-update logic (envgo run update)
 internal/
   envconfig/             .env parser (quotes, comments, ${VAR} expansion)
   envstore/              hot-reloading in-memory variable store
+  hotreload/             .env mtime watcher
   proxy/                 local-mode /proxy engine
   gateway/               public-mode /api/<name> gateway and config parser
   server/                router, security guards, static serving, PHP, dashboard
@@ -143,15 +149,19 @@ internal/
   history/               bounded ring buffer of request metadata
   logger/                leveled, secret-redacting logger
   token/                 session token generation
-scripts/install.sh       interactive installer
+  lan/                   LAN address discovery for --qr
+  qr/                    dependency-free QR encoder (terminal + PNG output)
+Install_envGo.command    double-click macOS installer
+scripts/install.sh       Linux installer
+scripts/install.ps1      Windows PowerShell installer
 Makefile                 build, test, release targets
 dist/                    cross-compiled binaries produced by `make release`
 ```
 
 Two notes for contributors:
 
-- The Go module path is `envbridge` for historical reasons, so imports read
-  `envbridge/internal/...`. The product name is envGo.
+- The Go module path is `envgo`, matching the product name, so imports read
+  `envgo/internal/...`.
 - This documentation site is maintained **separately** from the Go source tree,
   in its own Astro project. A change to the code does not automatically update
   these pages.
@@ -192,19 +202,20 @@ make test
 make release
 ```
 
-Artifact sizes, as of the current build:
+Artifact sizes from the current release build — every target is uncompressed:
 
 | Target | Size |
 |--------|------|
-| `envgo-linux-amd64` | ~2.5 MB (UPX-compressed) |
-| `envgo-linux-arm64` | ~2.1 MB (UPX-compressed) |
-| `envgo-windows-amd64.exe` | ~2.5 MB (UPX-compressed) |
-| `envgo-windows-arm64.exe` | ~3.0 MB (UPX-compressed) |
-| `envgo-darwin-amd64` | ~8.1 MB (not compressed) |
-| `envgo-darwin-arm64` | ~7.5 MB (not compressed) |
+| `envgo-linux-amd64` | ~8.3 MB |
+| `envgo-linux-arm64` | ~7.7 MB |
+| `envgo-windows-amd64.exe` | ~8.5 MB |
+| `envgo-windows-arm64.exe` | ~7.7 MB |
+| `envgo-darwin-amd64` | ~8.4 MB |
+| `envgo-darwin-arm64` | ~7.8 MB |
 
-macOS binaries are deliberately not UPX-compressed: compressing a Mach-O binary
-breaks code signing on Apple Silicon.
+No UPX packing is applied. Compressing a Mach-O binary would break code signing
+on Apple Silicon, and shipping identical, verifiable binaries on every platform
+is worth more than a smaller download.
 
 ## Use cases
 
@@ -212,10 +223,12 @@ breaks code signing on Apple Silicon.
 - **Prototyping** — iterate without a server framework
 - **Static sites** — add API functionality to a plain HTML/JS project
 - **Existing PHP apps** — keep the pages, move the keys server-side
+- **Previewing on a phone** — `envgo run dev --qr` prints a scannable LAN code
 - **Learning** — a small, readable example of server-side secret injection
 
 ## Next steps
 
 - [Installation](/getting-started/installation) — install with the ZIP installer or manually
 - [Quick Start](/getting-started/quick-start) — a working setup in five minutes
+- [Sharing with your phone](/guides/sharing-with-your-phone) — open it on a phone with `--qr`
 - [How It Works](/core-concepts/how-it-works) — the request lifecycle

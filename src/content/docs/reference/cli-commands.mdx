@@ -12,6 +12,15 @@ form, its default value, and its exact behaviour is listed below.
 envgo [subcommand] [flags] [arguments]
 ```
 
+:::tip[Running bare `envgo` prints help]
+Typing `envgo` with **no arguments at all** prints the help text and exits. It
+never starts a server. This is deliberate — silently listening on `127.0.0.1:8080`
+looks like a hang and gives no clue what to type next.
+
+To start a server, name what you want: `envgo run dev`, or pass at least one flag
+such as `envgo -e .env -p 3000`.
+:::
+
 :::caution[Subcommand must come first]
 The subcommand (`run`, `init`, `deploy`) must be the **first** argument.
 
@@ -29,9 +38,10 @@ envGo has two modes, selected by `--config` **or** `.env`:
 
 | Invocation | Mode | What it does |
 |------------|------|--------------|
-| `envgo` | Local | Static file server + `/proxy` with session token |
-| `envgo run` | Local | Same, but reads `HOST`/`PORT`/`MODE_PUBLIC` from `.env` |
+| `envgo` | — | Prints help and exits. No server is started |
+| `envgo run` | Local | Static file server + `/proxy` with session token, reads `HOST`/`PORT` from `.env` |
 | `envgo run dev` / `envgo dev` | Local (dev) | Same as `run`, and always opens a browser |
+| `envgo -e .env` | Local | Server with flags only — `.env` supplies variables, but not `HOST`/`PORT` |
 | `envgo --config routes.json` | Public | Fixed routes at `/api/<name>`, no token handshake |
 | `MODE_PUBLIC=true envgo run` | Public | Same as `--config`, but via `.env` (`CONFIG` optional) |
 
@@ -39,15 +49,22 @@ envGo has two modes, selected by `--config` **or** `.env`:
 
 | Command | Description |
 |---------|-------------|
-| `envgo` | Start the server with default flags |
+| `envgo` | Print help and exit — a bare `envgo` never starts a server |
 | `envgo run` | Start the server and read `HOST`/`PORT` from `.env` |
 | `envgo run dev` | Start in dev mode (implies `--browser`) |
 | `envgo dev` | Alias for `envgo run dev` |
+| `envgo run update` | Check for and install the latest envGo release in place |
+| `envgo cache clear` | Broadcast a hard reload to all connected dev-server browser tabs |
 | `envgo init` | Create a starter project in the current directory |
 | `envgo init -name myapp` | Create the starter project in a new `myapp/` directory |
 | `envgo deploy` | Generate `Caddyfile`, `nginx.conf`, `Dockerfile` |
 | `envgo -v` | Print version and exit |
 | `envgo -h` | Show help and exit |
+
+:::caution[`envgo cache` needs its subcommand]
+`envgo cache` on its own prints `Usage: envgo cache clear` and exits. The
+subcommand `clear` is not optional.
+:::
 
 ## Flags
 
@@ -62,6 +79,8 @@ envGo has two modes, selected by `--config` **or** `.env`:
 | `--dashboard` | `-D` | bool | `false` | Enable the metadata dashboard in public mode |
 | `--tls` | | bool | `false` | Serve HTTPS with an auto-generated self-signed certificate |
 | `--browser` | `-b` | bool | `false` | Open the browser automatically after start |
+| `--qr` | | bool | `false` | Bind all interfaces and print a scannable QR code of the LAN URL |
+| `--qr-format` | | string | `ansi` | QR output: `ansi` (terminal) or `png` (file) |
 | `--debug` | | bool | `false` | Verbose logging |
 | `--name` | | string | *(empty)* | Project name for `envgo init` (empty = current directory) |
 | `-o` | | string | *(empty)* | Output directory for `envgo deploy` (default: `./deploy`) |
@@ -76,6 +95,79 @@ If the requested port is already in use, envGo tries the next 19 ports
 (`8080` → `8081` → … → `8099`) before giving up. The address actually bound is
 printed at startup, so check the log if you do not get the port you asked for.
 
+### Sharing with a phone: `--qr`
+
+`--qr` answers "how do I open this on my phone?" — it binds every interface so
+other devices on the same Wi-Fi can reach the server, then prints a QR code that
+encodes the **LAN** address.
+
+```bash
+envgo run dev --qr
+```
+
+```text
+[envGo] --qr: binding all interfaces so other devices on this network can connect
+[envGo] envGo running -> http://127.0.0.1:8080/
+[envGo] envGo network -> http://192.168.1.20:8080   (same network only)
+
+  █─────█ ─│  ─█│─  █─────█
+  █ ███ █ ││─ ─│─█─ █ ███ █
+  █ ─── █ ██│─  ──│ █ ─── █
+  ─────── █ █│█ ─│█ ───────
+  ─   ─ ─█────█│─│─█─███ │─
+  ─│█── ──│─█── │──█│─│─█│
+  █│█─────█││─█│─█  ─││──█─
+    │──█──│ │██─│██│█─ ██│
+  ── ─ ───█ █││ ─██───█─█
+  █─────█ ─ ██── │█ ─ ██│││
+  █ ███ █ ───█│ ─ █─█──│█││
+  █ ─── █  █ █─   ─│─││││█
+  ─────── ─ ─   ─  ──   ───
+  Scan with a phone on the same network to open: http://192.168.1.20:8080
+```
+
+Key details:
+
+- **Both URLs are printed.** `local` is for this machine, `network` is the one to
+  scan. The QR always encodes the LAN address — never `127.0.0.1`, which is
+  meaningless from a phone.
+- **Only the host changes.** The port is whatever `.env` or `--port` resolved to.
+- **`--qr` works with or without `run dev`.** `envgo -e .env --qr` is fine; the
+  subcommand is not required.
+- **You do not need to pass `--host`.** `--qr` overrides a `127.0.0.1` default. If
+  you *did* set `--host` to a specific non-loopback address, envGo leaves it
+  alone.
+
+:::caution[`--qr` makes the server reachable on your network]
+Without `--qr` the server binds `127.0.0.1` and no other device can reach it.
+With `--qr` it binds `0.0.0.0`, so anyone on the same network can load your site
+and reach the `/proxy` endpoint (subject to the session token, `Origin`, and
+`Host` checks). Stop the server when you are done.
+
+If the phone cannot connect, the port is usually blocked by the host firewall —
+see [Sharing with your phone](/guides/sharing-with-your-phone).
+:::
+
+#### `--qr-format`
+
+| Value | Result |
+|-------|--------|
+| `ansi` *(default)* | Prints the QR to the terminal using block characters |
+| `png` | Writes `qrcode_<ip>_<port>.png` in the current directory |
+
+```bash
+envgo run dev --qr --qr-format png
+# [envGo] QR code for http://192.168.1.20:8080 written to qrcode_192.168.1.20_8080.png
+```
+
+Use `png` when your terminal mangles the block characters — SSH sessions, some
+Windows consoles, and CI logs commonly do. Only the literal value `png` (any
+case) switches to file output; anything else falls back to the terminal, so a
+typo like `--qr-format image` prints to the terminal instead of erroring.
+
+The QR is rendered by an encoder built into the binary (no dependency, no
+network call), so it works fully offline.
+
 ### `HOST`, `PORT`, and `MODE_PUBLIC` from `.env`
 
 `HOST`/`PORT` are only read when you use `envgo run` or `envgo run dev`, **and** only if
@@ -87,7 +179,7 @@ you did not override them on the command line:
 Both uppercase (`HOST`) and lowercase (`host`) keys are accepted. A leading colon
 in `PORT` is stripped, so `PORT=:3000` works.
 
-`MODE_PUBLIC` / `CONFIG` are read **on every start** (even plain `envgo`), when `--config` is not given:
+`MODE_PUBLIC` / `CONFIG` are read **on every start**, when `--config` is not given:
 
 - `MODE_PUBLIC=true` / `1` / `yes` / `public` → public mode (looks for `envgo.routes.json` or `routes.json`)
 - `MODE_PUBLIC=false` / `0` / `no` / `local` → local mode
@@ -156,6 +248,12 @@ envgo --dir . --env .env --allow httpbin.org
 # Dev mode: reads HOST/PORT from .env and opens the browser
 envgo run dev
 
+# Open it on your phone: bind the LAN interface and print a scannable QR code
+envgo run dev --qr
+
+# Same, but write the QR to a PNG file instead of the terminal
+envgo run dev --qr --qr-format png
+
 # Dev mode with verbose logging (flag AFTER the subcommand)
 envgo run dev --debug
 
@@ -180,6 +278,15 @@ envgo init -name myapp
 
 # Generate deployment configs
 envgo deploy -o ./deploy
+
+# Update envgo in place
+envgo run update
+
+# Force a hard reload in every dev-server browser tab
+envgo cache clear
+
+# Show help (what a bare `envgo` does)
+envgo
 ```
 
 `envgo deploy -o ./deploy` writes three files: `Caddyfile`, `nginx.conf`, and
@@ -211,6 +318,7 @@ running.
 
 ## Next steps
 
+- [Sharing with your phone](/guides/sharing-with-your-phone) — `--qr` and LAN access in detail
 - [Configuration](/reference/configuration) — routes JSON reference for public mode
 - [Threat Model](/reference/threat-model) — what each guard protects against
 - [Local Mode](/modes/local-mode) — development workflow

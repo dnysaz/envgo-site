@@ -43,10 +43,15 @@ holds the key. No Node.js, no `node_modules`, no runtime to install — roughly
     Public mode serves `/api/&lt;name&gt;` from a JSON config, with per-route
     variable allow-sets, rate limiting, and optional bearer auth.
   </Card>
-  <Card title="Hot reload" icon="refresh">
-    Edit `.env` while running — changes are picked up within about 1.5 seconds, no
-    restart.
-  </Card>
+    <Card title="Hot reload" icon="refresh">
+      Edit `.env` while running — changes are picked up within about 1.5 seconds, no
+      restart.
+    </Card>
+    <Card title="Open it on your phone" icon="phone">
+      Add `--qr` and envGo binds your network interface, then prints a
+      scannable QR code of the LAN address. No typing an IP, no tunnel, no
+      deployment. <a href="/guides/sharing-with-your-phone/">How it works →</a>
+    </Card>
   <Card title="Cross-platform" icon="laptop">
     macOS, Linux, and Windows on amd64 and arm64, all from one codebase.
   </Card>
