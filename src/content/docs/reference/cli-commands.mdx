@@ -105,30 +105,14 @@ encodes the **LAN** address.
 envgo run dev --qr
 ```
 
-```text
-[envGo] --qr: binding all interfaces so other devices on this network can connect
-[envGo] envGo running -> http://127.0.0.1:8080/
-[envGo] envGo network -> http://192.168.1.20:8080   (same network only)
+{/* Raw pre element, not a fenced block: the syntax highlighter strips the
+    trailing spaces that form the QR code quiet zone. */}
+<pre class="qr-sample"><code>{`[envGo] --qr: binding all interfaces so other devices on this network can connect\n[envGo] envGo running -> http://127.0.0.1:8080/\n[envGo] envGo network -> http://192.168.1.20:8080   (same network only)\n\n  Scan with a phone on the same network to open: http://192.168.1.20:8080\n                                 \n                                 \n    █▀▀▀▀▀█ ▀▀  ▄█  ▀ █▀▀▀▀▀█    \n    █ ███ █ ▀█▀▀▄█▀▄  █ ███ █    \n    █ ▀▀▀ █ ▄▄ █▀▀  █ █ ▀▀▀ █    \n    ▀▀▀▀▀▀▀ ▀ ▀▄█ ▀ ▀ ▀▀▀▀▀▀▀    \n    █ █▄▄▄▀▀▄▄▄▄▄▄██ ▄▄▀ ▄▀▄█    \n    ▀▄█ █ ▀▄▄▄▄ ▄ ▀██▀█ ██▀ ▀    \n    ▀ ▀▄██▀ ▀▀▄▀ ▄█▄▀▀█    ▄█    \n    ▀▀█▀▀█▀▀ ██▀ ▀▀▀▀ ▄ ▀▀▀ ▀    \n    ▀▀▀  ▀▀▀▄ ▀▀█ █▄█▀▀▀█ ▄▀▄    \n    █▀▀▀▀▀█ ▀▀▄▄█▀▀ █ ▀ █▀  ▀    \n    █ ███ █  █▄ ▀▄█▀█▀▀███▄█     \n    █ ▀▀▀ █ ▀▄█▀▀▀▀▄█  ██  ▀▀    \n    ▀▀▀▀▀▀▀ ▀ ▀▀  ▀▀▀ ▀  ▀  ▀    \n                                 \n                                 `}</code></pre>
 
-  
-  
-    █▀▀▀▀▀█ ▀▀  ▄█  ▀ █▀▀▀▀▀█    
-    █ ███ █ ▀█▀▀▄█▀▄  █ ███ █    
-    █ ▀▀▀ █ ▄▄ █▀▀  █ █ ▀▀▀ █    
-    ▀▀▀▀▀▀▀ ▀ ▀▄█ ▀ ▀ ▀▀▀▀▀▀▀    
-    █ █▄▄▄▀▀▄▄▄▄▄▄██ ▄▄▀ ▄▀▄█    
-    ▀▄█ █ ▀▄▄▄▄ ▄ ▀██▀█ ██▀ ▀    
-    ▀ ▀▄██▀ ▀▀▄▀ ▄█▄▀▀█    ▄█    
-    ▀▀█▀▀█▀▀ ██▀ ▀▀▀▀ ▄ ▀▀▀ ▀    
-    ▀▀▀  ▀▀▀▄ ▀▀█ █▄█▀▀▀█ ▄▀▄    
-    █▀▀▀▀▀█ ▀▀▄▄█▀▀ █ ▀ █▀  ▀    
-    █ ███ █  █▄ ▀▄█▀█▀▀███▄█     
-    █ ▀▀▀ █ ▀▄█▀▀▀▀▄█  ██  ▀▀    
-    ▀▀▀▀▀▀▀ ▀ ▀▀  ▀▀▀ ▀  ▀  ▀    
-  
-  
-  Scan with a phone on the same network to open: http://192.168.1.20:8080
-```
+<figure class="qr-figure">
+  <img src="/img/qr-lan-example.png" width="396" height="396" alt="QR code encoding http://192.168.1.20:8080, the address envGo prints for your network interface" />
+  <figcaption>The same code as a scannable image, written by <code>envgo --qr-format png</code>.</figcaption>
+</figure>
 
 Key details:
 

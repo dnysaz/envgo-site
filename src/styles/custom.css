@@ -85,3 +85,45 @@
   content: "↔";
   font-size: 0.9rem;
 }
+/* QR sample block. Rendered as a raw pre element rather than a fenced code
+   block, because the syntax highlighter strips the trailing spaces that make
+   up the QR code quiet zone. Needs an explicit line-height close to 1 so the
+   half-block glyphs do not gain vertical gaps. */
+.qr-sample {
+  font-family: var(--__sl-font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  line-height: 1.1;
+  background: var(--sl-color-gray-6);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  text-align: center;
+}
+.qr-sample code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  white-space: pre;
+}
+/* The scannable version. The PNG is opaque white so the light modules stay
+   light even on the dark theme. */
+.qr-figure {
+  margin: 1.5rem 0;
+  text-align: center;
+}
+.qr-figure img {
+  width: min(260px, 65%);
+  height: auto;
+  image-rendering: pixelated;
+  background: #fff;
+  padding: 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--sl-color-gray-5);
+}
+.qr-figure figcaption {
+  font-size: 0.8rem;
+  color: var(--sl-color-gray-3);
+  margin-top: 0.6rem;
+}
