@@ -46,7 +46,7 @@ myapp/
 
 Default content (`main.go:envContent`):
 
-```env title=".env (generated)"
+```dotenv title=".env (generated)"
 # envGo project
 # Copy to .env and fill in real values. NEVER commit the real .env.
 
@@ -69,7 +69,7 @@ PORT=8080
 
 **What else can you put in `.env`?** Anything you want — every other key is a secret:
 
-```env title=".env — add your own"
+```dotenv title=".env — add your own"
 MY_SECRET=change-me
 OPENAI_API_KEY=sk-live-abc123
 GEMINI_API_KEY=secret2
@@ -93,7 +93,7 @@ Hot reload: edit `.env` while running — `envstore.Watch` polls `mtime`/`size` 
 
 Same content as `.env` (`0644`), but values are placeholders. Commit this so teammates know which keys to fill. `main.go:checkEnvExampleSync` warns if names diverge, never values.
 
-```env title=".env.example"
+```dotenv title=".env.example"
 MY_SECRET=change-me
 HOST=127.0.0.1
 PORT=8080
@@ -149,7 +149,7 @@ Generated `README.md` repeats `envgo run dev`, `envgo -h`, `--tls`, `--config`, 
 
 ## Typical edits for a new dev
 
-```env title=".env — after onboarding"
+```dotenv title=".env — after onboarding"
 MY_SECRET=real-value-from-teammate
 OPENAI_API_KEY=sk-...
 HOST=127.0.0.1

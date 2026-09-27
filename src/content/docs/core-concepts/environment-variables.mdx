@@ -30,7 +30,7 @@ corresponding flag is still at its default. `MODE_PUBLIC`/`CONFIG` switch public
 
 ## File format
 
-```env
+```dotenv
 # Comments start with #
 KEY=value
 
@@ -67,7 +67,7 @@ EMPTY_VAR=
 Because expansion resolves earlier keys first, later keys can build on earlier
 ones:
 
-```env
+```dotenv
 HOST=api.example.com
 BASE_URL=https://${HOST}/v1
 # BASE_URL becomes https://api.example.com/v1
@@ -84,7 +84,7 @@ Two different rule sets apply, and they are not the same thing:
 
 **`.env` keys are not validated.** Any non-empty key is accepted:
 
-```env
+```dotenv
 123KEY=works
 MY-KEY=works
 _dotworks=works
@@ -112,13 +112,13 @@ Keys are case-sensitive: `MY_KEY` and `my_key` are two different variables.
 `.env` holds real values and must never be committed. `.env.example` documents
 which keys are required and is safe to commit — use obvious placeholders:
 
-```env title=".env.example"
+```dotenv title=".env.example"
 OPENAI_API_KEY=your-key-here
 DATABASE_URL=postgres://user:pass@localhost:5432/db
 SECRET_KEY=change-me
 ```
 
-```env title=".env"
+```dotenv title=".env"
 OPENAI_API_KEY=sk-live-abc123
 DATABASE_URL=postgres://app:realpassword@db.internal:5432/app
 SECRET_KEY=9f3c1d7a...

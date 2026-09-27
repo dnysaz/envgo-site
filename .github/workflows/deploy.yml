@@ -25,13 +25,13 @@ jobs:
         uses: actions/checkout@v4
 
       # Installs dependencies, runs `astro build`, and uploads dist/ as the
-      # Pages artifact. Reads `site` and `base` from astro.config.mjs.
+      # Pages artifact. The build command and output directory come from
+      # astro.config.mjs and package.json — withastro/action@v3 has no
+      # `build` or `dist-dir` inputs, passing them only produced warnings.
       - name: Build and upload artifact
         uses: withastro/action@v3
         with:
           node-version: 20
-          build: npm run build
-          dist-dir: ./dist
 
   deploy:
     name: Deploy
