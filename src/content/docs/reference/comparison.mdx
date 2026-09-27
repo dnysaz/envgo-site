@@ -7,16 +7,21 @@ envGo is intentionally narrow. This page makes the trade-offs explicit so you ca
 
 ## What envGo has
 
-- **Zero-dependency single binary** — `CGO_ENABLED=0`, standard library only, `go vet`/`go test` clean. No Node, no Python, no runtime to install. Size ~2–12 MB.
+- **Zero-dependency single binary** — `CGO_ENABLED=0`, standard library only, `go vet`/`go test` clean. No Node, no Python, no runtime to install. ~8 MB (7.7–8.5 MB across the six released targets; not UPX-packed).
 - **Static server + secure proxy** — serves your `index.html` and injects `{VAR}` server-side. The browser only sees placeholders and `window.EnvLoaded[NAME]=true`.
+- **Scan-to-open on a phone** — `--qr` binds every interface and prints a scannable QR of the LAN URL; `--qr-format png` adds a PNG file for terminals that mangle block characters.
 - **Two modes** — Local (`/proxy` + per-process token `X-EnvGo-Token`, checked with `Host` + `Origin` + `subtle.ConstantTimeCompare`) and Public (`/api/<name>` fixed routes from `envgo.routes.json`).
-- **Per-route gateway** — `vars` allow-set, per-route `rate_limit` (fixed-window), optional bearer `auth`, `scrub_response` via `logger.Redact`.
-- **Hot-reload** — `internal/envstore` polls `.env` every 1.5 s, no restart.
-- **Dashboard (metadata only)** — `GET /__envgo_dashboard` shows variable *names* and last 200 requests, never values.
+- **Outbound allowlist** — proxying is off until you pass `--allow host1,host2`, so a misconfigured route cannot become an open relay.
+- **Per-route gateway** — `vars` allow-set, per-route `rate_limit` (fixed-window), optional bearer `auth`, request shaping via `query`/`headers`/`body`, and `scrub_response` through `logger.Redact`.
+- **DNS-rebinding defence** — a closed allowlist of `Host` values built from the bound address, so a hostile domain resolving to `127.0.0.1` is still refused with 403.
+- **Hot-reload** — `internal/envstore` polls `.env` every 1.5 s with no restart; `/__envgo/reload` pushes an SSE event so an open page refreshes itself.
+- **Dashboard (metadata only)** — `GET /__envgo_dashboard` shows variable *names* and the last 200 requests, never values.
 - **Diagnostics** — `GET /__env.js` typo detection (Levenshtein ≤3) with red banner, PHP `echo getenv` warning, missing `vars` warning at startup.
-- **PHP** — executes `.php` via `php` binary with `.env` injected, 30 s timeout, header parsing.
-- **TLS** — `--tls` self-signed (TLS 1.2+), or run plain `127.0.0.1:8080` behind Caddy/nginx.
-- **Cross-platform** — `make release` builds darwin/linux/windows `amd64`+`arm64`, UPX on linux/windows.
+- **PHP** — executes `.php` via the `php` binary (CLI or `-cgi`) with `.env` injected, 30 s timeout, header parsing.
+- **TLS** — `--tls` self-signed, and the certificate carries the LAN address so a phone scanning over HTTPS gets a matching name.
+- **Scaffolding and deploy files** — `envgo init` writes a project template; `envgo deploy` generates `Caddyfile`, `nginx.conf` and a `Dockerfile` from your config.
+- **Self-update** — `envgo run update` fetches the latest release, best-effort-checks it against the published `SHA256SUMS`, then startup-tests the binary with `-h` before replacing itself.
+- **Cross-platform** — `make release` builds darwin/linux/windows `amd64`+`arm64` as six plain binaries.
 - **AI-friendly** — one copy-paste prompt (`/envgo-agent-prompt.txt`) that teaches any agent to `envgo -v` → auto-install → `envgo init` → `envgo run dev`.
 
 ## What envGo does not have
@@ -30,6 +35,8 @@ Be explicit about this before you commit:
 - **No build step.** envGo serves files as-is. It does not bundle, minify, or transpile JS.
 - **No secret rotation / vault.** It reads a flat `.env` file. For Vault/AWS Secrets Manager, sync to `.env` yourself.
 - **No multi-tenant isolation.** One `.env`, one gateway config per process. For per-user keys, you need a real backend.
+- **No shared concurrency story.** Rate limits and request history are per-process, so scaling out means scaling those out too.
+- **No atomic self-update.** `envgo run update` checks the new binary, but if the final swap fails it leaves it beside the old one and asks you to replace it by hand.
 
 If you need any of the above, envGo is the wrong tool — use Next.js/Nuxt API routes or a Worker.
 
@@ -43,22 +50,29 @@ If you need any of the above, envGo is the wrong tool — use Next.js/Nuxt API r
 | **Secret stays server-side?** | Yes — `{VAR}` substituted in Go (`proxy.inject`, `gateway.inject`) | Yes, but you write the handler yourself | Yes — `process.env` on server | Yes with `header_up`/`templates`, but manual | Yes — `env.MY_SECRET` in Worker |
 | **Leak via bundle?** | No — browser gets booleans only | Risk if you use `import.meta.env` in client | Risk if you forget `NEXT_PUBLIC_` prefix | No (static files) | No |
 | **Setup** | `envgo init` → `envgo run dev` | `vite.config.js` proxy table + custom handler | `pages/api/*.ts` per endpoint | `Caddyfile`/`nginx.conf` + `sub_filter` | `wrangler.toml` + `fetch` handler |
+| **Proxy locked down by default** | Yes — off until `--allow host` | Off unless you add a guard | Off unless you add a guard | Open by default | Per-route, you write it |
+| **Open it on your phone** | Yes — `--qr` prints a scannable LAN QR | No | No | Manual | No |
 | **Hot-reload `.env`** | Yes (1.5 s poll) | Restart needed | Restart needed | Reload needed | Redeploy |
+| **Live-reload an open page** | Yes — SSE at `/__envgo/reload` | HMR (full Vite) | HMR | No | No |
 | **Dashboard / history** | Yes — `/__envgo_dashboard` names only | No | No | No | Cloud logs only |
 | **Typo detection** | Yes — red banner + Levenshtein suggestion (`server/serveEnvJS`, `server/detectPHPTypo`) | No | No | No | No |
 | **Fixed public routes** | Yes — `/api/<name>` with `vars` + `rate_limit` + `auth` | Manual per-route handler | Manual per-route handler | Manual `handle /api/*` | Manual `export default { fetch }` |
+| **Request shaping** | Declarative — `query`, `headers`, `body` per route | Write a handler | Write a handler | `rewrite`/`replace` | Write a handler |
 | **Rate limiting** | Per-route fixed-window, per-IP (`ratelimit.Limiter`) | You add `express-rate-limit` | You add middleware | `rate_limit` directive | KV / Durable Objects |
 | **Auth per route** | Bearer matching `{ENV_VAR}` | You code it | `next-auth` etc. | `forward_auth` | You code it |
 | **PHP** | Yes — `php` exec with `.env` env | No | No | `php_fastcgi` | No |
-| **TLS** | Self-signed (`--tls`) or proxy | Dev via `mkcert` | Vercel auto | Caddy auto Let's Encrypt | Cloud auto |
-| **Binary / deploy size** | 2–12 MB single file | `node_modules` hundreds MB | Framework + build | ~15–40 MB | Bundle < few MB |
-| **Best for** | Static HTML/vanilla JS + one API key, AI-generated sites, internal tools, no-build demos | SPA dev already on Vite | Full-stack React/Vue app | Static site behind existing Caddy/nginx | Edge, multi-region, KV/DB |
+| **TLS** | Self-signed (`--tls`, LAN name included) or proxy | Dev via `mkcert` | Vercel auto | Caddy auto Let's Encrypt | Cloud auto |
+| **Generate deploy files** | Yes — `envgo deploy` writes Caddyfile, nginx.conf, Dockerfile | No | No | You write them | `wrangler deploy` |
+| **Update itself** | Yes — `envgo run update` | `npm update` | `npm update` | Package manager | CLI redeploy |
+| **Binary / deploy size** | ~8 MB single file | `node_modules` hundreds MB | Framework + build | ~15–40 MB | Bundle < few MB |
+| **Best for** | Static HTML/vanilla JS + one API key, AI-generated sites, internal tools, no-build demos, "just open it on my phone" | SPA dev already on Vite | Full-stack React/Vue app | Static site behind existing Caddy/nginx | Edge, multi-region, KV/DB |
 
 ## When to choose what
 
 | You are... | Pick |
 |---|---|
 | Beginner, designer, AI agent that just generated `index.html` and needs to call OpenAI without learning Node | **envGo** |
+| Want to open the thing on your phone right now, with no tunnel account | **envGo** |
 | Already building a SPA with Vite and comfortable writing a small proxy handler | Vite proxy |
 | Building a full app with DB, auth, SSR | Next.js / Nuxt |
 | Already running Caddy/nginx in prod and want `templates` or `header_up` | Caddy/nginx |
@@ -68,4 +82,4 @@ If you need any of the above, envGo is the wrong tool — use Next.js/Nuxt API r
 
 envGo is not a replacement for a backend. It is a **bridge for the gap between “I have a static HTML file” and “I need one secret without learning a framework.”** If that gap is your project, envGo is the shortest path. If you have already crossed that gap, stick with what you have.
 
-Further reading: [Threat Model](/reference/threat-model), [Configuration](/reference/configuration), [How It Works](/core-concepts/how-it-works).
+Further reading: [Threat Model](/reference/threat-model), [Configuration](/reference/configuration), [How It Works](/core-concepts/how-it-works), [Sharing with your phone](/guides/sharing-with-your-phone/).
