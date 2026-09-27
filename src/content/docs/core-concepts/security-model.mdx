@@ -46,14 +46,20 @@ to client-side code.
 ## Layer 2 — Host validation
 
 ```go
-// enabled addresses come from the bound address, not from the request
+
+The set covers every address the listener genuinely answers on, not just the
+literal bind string. Binding to `0.0.0.0` means the server is reachable on
+`127.0.0.1` and on the LAN IP, so both are allowed; otherwise the dashboard
+would refuse the very URLs envGo prints and encodes into the QR code. An
+off-machine name is still rejected, which is what the check is for.
+// allowed addresses come from the bound address, not from the request
 func allowedHosts(addr string) []string {
-	_, port, _ := net.SplitHostPort(addr)
-	return []string{
-		addr,
-		net.JoinHostPort("localhost", port),
-		net.JoinHostPort(host, port),
-	}
+	host, port, err := net.SplitHostPort(addr)
+	// addr, host:port
+	// localhost:port, 127.0.0.1:port, [::1]:port
+	// plus every local interface address when the bind address is
+	// unspecified (0.0.0.0), which is what --qr does
+	// ...
 }
 ```
 

@@ -80,7 +80,7 @@ subcommand `clear` is not optional.
 | `--tls` | | bool | `false` | Serve HTTPS with an auto-generated self-signed certificate |
 | `--browser` | `-b` | bool | `false` | Open the browser automatically after start |
 | `--qr` | | bool | `false` | Bind all interfaces and print a scannable QR code of the LAN URL |
-| `--qr-format` | | string | `ansi` | QR output: `ansi` (terminal) or `png` (file) |
+| `--qr-format` | | string | `ansi` | QR output: `ansi` (terminal) or `png` (terminal + PNG file). Requires `--qr`. |
 | `--debug` | | bool | `false` | Verbose logging |
 | `--name` | | string | *(empty)* | Project name for `envgo init` (empty = current directory) |
 | `-o` | | string | *(empty)* | Output directory for `envgo deploy` (default: `./deploy`) |
@@ -141,17 +141,22 @@ see [Sharing with your phone](/guides/sharing-with-your-phone).
 | Value | Result |
 |-------|--------|
 | `ansi` *(default)* | Prints the QR to the terminal using block characters |
-| `png` | Writes `qrcode_<ip>_<port>.png` in the current directory |
+| `png` | Prints the QR to the terminal **and** writes `qrcode_<ip>_<port>.png` in the current directory |
 
 ```bash
 envgo run dev --qr --qr-format png
-# [envGo] QR code for http://192.168.1.20:8080 written to qrcode_192.168.1.20_8080.png
+# ...terminal QR...
+# [envGo] QR code also written to qrcode_192.168.1.20_8080.png
 ```
 
 Use `png` when your terminal mangles the block characters — SSH sessions, some
-Windows consoles, and CI logs commonly do. Only the literal value `png` (any
-case) switches to file output; anything else falls back to the terminal, so a
-typo like `--qr-format image` prints to the terminal instead of erroring.
+Windows consoles, and CI logs commonly do. It **adds** a PNG file; it never
+suppresses the terminal QR, so the command always shows something. Only the
+literal value `png` (any case) writes a file; anything else — including a typo
+like `--qr-format image` — simply prints to the terminal instead of erroring.
+
+`--qr-format` needs `--qr`. On its own envGo warns that no QR will be produced
+rather than silently ignoring the flag.
 
 The QR is rendered by an encoder built into the binary (no dependency, no
 network call), so it works fully offline.
