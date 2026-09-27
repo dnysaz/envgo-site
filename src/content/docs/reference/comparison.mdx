@@ -20,7 +20,7 @@ envGo is intentionally narrow. This page makes the trade-offs explicit so you ca
 - **PHP** — executes `.php` via the `php` binary (CLI or `-cgi`) with `.env` injected, 30 s timeout, header parsing.
 - **TLS** — `--tls` self-signed, and the certificate carries the LAN address so a phone scanning over HTTPS gets a matching name.
 - **Scaffolding and deploy files** — `envgo init` writes a project template; `envgo deploy` generates `Caddyfile`, `nginx.conf` and a `Dockerfile` from your config.
-- **Self-update** — `envgo run update` fetches the latest release, best-effort-checks it against the published `SHA256SUMS`, then startup-tests the binary with `-h` before replacing itself.
+- **Self-update** — `envgo run update` fetches the latest release, best-effort-checks it against the published `SHA256SUMS`, then startup-tests the binary with `-h` before replacing itself with a same-directory `os.Rename`.
 - **Cross-platform** — `make release` builds darwin/linux/windows `amd64`+`arm64` as six plain binaries.
 - **AI-friendly** — one copy-paste prompt (`/envgo-agent-prompt.txt`) that teaches any agent to `envgo -v` → auto-install → `envgo init` → `envgo run dev`.
 
@@ -36,7 +36,6 @@ Be explicit about this before you commit:
 - **No secret rotation / vault.** It reads a flat `.env` file. For Vault/AWS Secrets Manager, sync to `.env` yourself.
 - **No multi-tenant isolation.** One `.env`, one gateway config per process. For per-user keys, you need a real backend.
 - **No shared concurrency story.** Rate limits and request history are per-process, so scaling out means scaling those out too.
-- **No atomic self-update.** `envgo run update` checks the new binary, but if the final swap fails it leaves it beside the old one and asks you to replace it by hand.
 
 If you need any of the above, envGo is the wrong tool — use Next.js/Nuxt API routes or a Worker.
 
