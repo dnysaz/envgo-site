@@ -20,7 +20,7 @@ envGo is intentionally narrow. This page makes the trade-offs explicit so you ca
 - **PHP** — executes `.php` via the `php` binary (CLI or `-cgi`) with `.env` injected, 30 s timeout, header parsing.
 - **TLS** — `--tls` self-signed, and the certificate carries the LAN address so a phone scanning over HTTPS gets a matching name.
 - **Scaffolding and deploy files** — `envgo init` writes a project template; `envgo deploy` generates `Caddyfile`, `nginx.conf` and a `Dockerfile` from your config.
-- **Self-update** — `envgo run update` fetches the latest release, best-effort-checks it against the published `SHA256SUMS`, then startup-tests the binary with `-h` before replacing itself with a same-directory `os.Rename`.
+- **Self-update** — `envgo run update` fetches the latest release and refuses to install anything whose SHA256 is not proven against the published `SHA256SUMS`. A mismatch always aborts, and so does being unable to reach the manifest; `--skip-checksum` is the explicit opt-out for proxies and air-gapped mirrors, and never covers a real mismatch. The verified binary is startup-tested with `-h` and swapped in with a same-directory `os.Rename`.
 - **Cross-platform** — `make release` builds darwin/linux/windows `amd64`+`arm64` as six plain binaries.
 - **AI-friendly** — one copy-paste prompt (`/envgo-agent-prompt.txt`) that teaches any agent to `envgo -v` → auto-install → `envgo init` → `envgo run dev`.
 
