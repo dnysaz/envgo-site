@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # envGo has no release automation, so nothing fires this workflow when a new
+  # tag is published. Without a schedule the install page can advertise a
+  # version many releases behind. A daily rebuild bounds that drift to 24h;
+  # GitHub Pages content is idempotent, so a no-op redeploy is harmless.
+  schedule:
+    - cron: '17 6 * * *'
 
 # Allow the workflow to publish to Pages via OIDC.
 permissions:
