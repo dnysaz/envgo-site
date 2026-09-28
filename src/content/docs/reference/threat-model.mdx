@@ -23,6 +23,7 @@ the exact mechanism used, and — just as importantly — the limits of each def
 | Accidental secret logging | Every log line passes through a redacting logger | `logger.Logger.Redact` |
 | Secrets committed to git | `envgo init` writes a `.gitignore` covering `.env` | `main.go` `doInit` |
 | Config file disclosure over HTTP | `envgo.routes.json`, `routes.json` are always blocked from static serving, and dotfiles are never served | `server.serveStatic` |
+| Tampered self-update | `envgo run update` refuses to install a download whose SHA256 is not proven to match the release manifest | `verifyChecksum`, `verifyDownload` |
 
 ## Defences in detail
 
@@ -60,6 +61,46 @@ The logger is taught every secret value loaded from `.env` (excluding `HOST` and
 bodies have occurrences replaced with `[REDACTED]`. Longest values are replaced
 first so overlapping secrets are handled deterministically.
 
+### Self-update integrity
+
+`envgo run update` is the only part of envGo that fetches an executable from the
+network, so it is the only part that can be attacked by tampering with a
+download. It refuses to install anything it cannot prove is the released binary:
+
+1. The platform binary is downloaded to a temporary file **next to** the running
+   executable, so the final `os.Rename` happens on the same filesystem and is
+   atomic. There is no window where a half-written binary sits at the target path.
+2. The SHA256 of that download is computed and compared against the release's
+   `SHA256SUMS` manifest.
+3. Only a proven match prints `checksum OK` and lets the install continue.
+4. The downloaded binary is then executed with `-h` as a smoke test, and only
+   then swapped in.
+
+The gate covers the fallback path too. When the GitHub API is unreachable,
+`envgo` still downloads directly from `/releases/latest/download/`, and that
+download goes through the same checksum check — an earlier version skipped
+verification entirely on that path.
+
+**A digest mismatch always aborts** and cannot be overridden. The bytes you
+received are not the bytes that were published, and only the release author can
+explain that.
+
+**Being unable to verify is also a failure.** If the manifest cannot be fetched,
+cannot be read, or does not list your platform's asset, the update stops. These
+outcomes are all reported as "unverified" rather than treated as success, because
+an attacker who can substitute a binary can equally serve a manifest that omits
+it. The startup `-h` check is not a substitute: any binary can answer `-h`.
+
+The escape hatch for a network that cannot reach the manifest at all — a
+corporate proxy, or an air-gapped mirror — is an explicit opt-out:
+
+```bash
+envgo run update --skip-checksum   # or -k
+```
+
+It prints a warning and installs an **unverified** binary. Use it only when you
+control the mirror and have verified it yourself.
+
 ## Known limitations
 
 Be aware of these before trusting envGo with a high-value secret:
@@ -96,6 +137,12 @@ Be aware of these before trusting envGo with a high-value secret:
   in the served directory. Do not serve the directory that holds your `.env`.
 - **`--tls` uses a self-signed certificate.** Browsers will warn. Use a reverse
   proxy with real certificates for anything public.
+- **The self-updater trusts GitHub's CDN, not a signature.** The checksum proves
+  the download matches the manifest that was served next to it; it does not
+  protect against a GitHub account or CDN compromise that serves *both* a
+  substituted binary and a substituted manifest. For a high-assurance setup,
+  download the release yourself, verify it out of band, and replace the binary
+  by hand instead of using `envgo run update`.
 
 ## Security checklist for production
 
@@ -109,6 +156,7 @@ Be aware of these before trusting envGo with a high-value secret:
 - [ ] `scrub_response` enabled if upstreams might echo secrets
 - [ ] `.env.example` contains placeholder values only
 - [ ] Secrets rotated if they were ever committed or logged
+- [ ] `--skip-checksum` is **not** passed to `envgo run update` (it installs an unverified binary)
 
 ## Reporting a vulnerability
 
